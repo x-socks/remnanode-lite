@@ -781,6 +781,22 @@ export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
 export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-1}"
 export XRAY_CORE_VERSION="$([ -x /usr/local/bin/rw-core ] && /usr/local/bin/rw-core version | head -n 1 || true)"
 
+cleanup_stale_node_processes() {
+    stale_pids="$(ps -o pid,args | awk -v main_file="${MAIN_FILE}" '$1 ~ /^[0-9]+$/ && index($0, "node " main_file) > 0 { print $1 }')"
+
+    if [ -n "${stale_pids}" ]; then
+        printf '%s\n' "remnanode-start: stopping stale node processes for ${MAIN_FILE}" >&2
+        for pid in ${stale_pids}; do
+            kill "${pid}" 2>/dev/null || true
+        done
+        sleep 1
+        for pid in ${stale_pids}; do
+            kill -9 "${pid}" 2>/dev/null || true
+        done
+    fi
+}
+
+cleanup_stale_node_processes
 rm -f "${INTERNAL_SOCKET_PATH}" "${SUPERVISORD_SOCKET_PATH}" "${SUPERVISORD_PID_PATH}" 2>/dev/null || true
 pkill -x supervisord 2>/dev/null || true
 
