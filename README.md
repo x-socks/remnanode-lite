@@ -2,6 +2,15 @@
 
 Bare-metal deployment scaffold for running Remnanode on extremely constrained Alpine LXC VPS instances.
 
+Quick install:
+
+```sh
+apk add --no-cache curl && \
+curl -fsSL -o /tmp/one-click-deploy.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh && \
+sh /tmp/one-click-deploy.sh
+```
+
 Validated target state:
 
 - Alpine Linux `3.23.x` with OpenRC
