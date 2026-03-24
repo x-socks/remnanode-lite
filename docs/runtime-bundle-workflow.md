@@ -54,18 +54,9 @@ Copy the generated tarball to the target host, for example:
 scp out/remnanode-runtime-*.tar.gz root@your-host:/root/
 ```
 
-If you also want a portable helper bundle for first-time bootstrap:
-
-```sh
-./scripts/package-host-tools.sh
-```
-
-That writes `out/remnanode-host-tools-*.tar.gz`.
-
 If you publish GitHub releases from Actions, the host can also consume these stable asset names:
 
 - `remnanode-runtime-latest.tar.gz`
-- `remnanode-host-tools-latest.tar.gz`
 
 ## 3. Install or Update Runtime On the Target Host
 
@@ -75,21 +66,16 @@ On the Alpine host:
 ./scripts/install-runtime-bundle.sh /root/remnanode-runtime-<stamp>.tar.gz
 ```
 
-For a first-time host bootstrap from an extracted helper bundle:
+For a first-time host bootstrap directly from the repository:
 
 ```sh
-tar -xzf remnanode-host-tools-<stamp>.tar.gz
-cd remnanode-host-tools
-./scripts/bootstrap-host.sh /root/remnanode-runtime-<stamp>.tar.gz
+apk add --no-cache curl && \
+curl -fsSL -o /root/one-click-deploy.sh \
+  https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-deploy.sh && \
+sh /root/one-click-deploy.sh
 ```
 
-For a first-time host bootstrap directly from the latest GitHub release:
-
-```sh
-curl -fsSL -o /tmp/bootstrap-from-github-release.sh \
-  https://raw.githubusercontent.com/<owner>/<repo>/<branch>/scripts/bootstrap-from-github-release.sh
-sh /tmp/bootstrap-from-github-release.sh <owner>/<repo>
-```
+That installer writes the OpenRC and supervisord files directly on the host, then downloads only the runtime bundle from the latest GitHub release.
 
 This installs into a release directory and repoints:
 

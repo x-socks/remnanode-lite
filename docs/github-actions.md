@@ -6,7 +6,7 @@ The intended split is:
 
 1. GitHub Actions exports the runtime bundle from the upstream Docker image.
 2. Actions stores the bundle as a workflow artifact, and optionally as a GitHub release asset.
-3. Actions can optionally SSH into the Alpine host, install host helpers, install the runtime bundle, and restart the service.
+3. Actions can optionally SSH into an already-bootstrapped Alpine host, install the runtime bundle, and restart the service.
 
 The workflow is in [.github/workflows/runtime-bundle.yml](../.github/workflows/runtime-bundle.yml).
 
@@ -24,12 +24,11 @@ If release creation still fails with `Resource not accessible by integration`, c
 - `Settings` -> `Actions` -> `General` -> `Workflow permissions`
 - choose `Read and write permissions`
 
-When `publish_release=true`, each release contains both stamped assets and stable alias assets:
+When `publish_release=true`, each release contains only runtime assets:
 
 - `remnanode-runtime-latest.tar.gz`
-- `remnanode-host-tools-latest.tar.gz`
 
-The stable names are intended for pull-based updates on the Alpine host.
+The stable name is intended for pull-based updates on the Alpine host.
 
 The current pull-based scripts assume the repository release assets are publicly downloadable.
 
@@ -53,8 +52,8 @@ If `DEPLOY_KNOWN_HOSTS` is not set, the workflow falls back to `ssh-keyscan`.
 - `image_ref`: upstream image to export
 - `app_root`: optional override if the container app root is not auto-detected
 - `include_paths`: optional override for copied runtime paths
-- `publish_release`: publish runtime and host-tools bundles as release assets
-- `deploy_host`: push the bundles to the Alpine host and run bootstrap/update
+- `publish_release`: publish runtime bundles as release assets
+- `deploy_host`: push the runtime bundle to the Alpine host and run update
 - `base_dir`: install target, default `/opt/remnanode`
 - `restart_service`: restart `remnanode` after remote install
 
@@ -68,16 +67,17 @@ Artifact only:
 
 Release asset:
 
-- export both bundles
-- publish them as a GitHub release
+- export the runtime bundle
+- publish it as a GitHub release
 - useful if you want the host or an external script to fetch a known asset later
 
 Direct remote deploy:
 
-- export both bundles
-- copy them to the Alpine host over SSH
-- run `bootstrap-host.sh` remotely
+- export the runtime bundle
+- copy it to an Alpine host over SSH
+- run `/usr/local/bin/install-remnanode-runtime` remotely
 - optionally restart `remnanode`
+- requires that the host has already been bootstrapped once with the one-click installer
 
 Pull-based host updates:
 
@@ -89,7 +89,8 @@ Pull-based host updates:
 
 For the first host bring-up:
 
-- run the workflow with `deploy_host=true` and `restart_service=false`
+- bootstrap the host once with the one-click installer
+- run the workflow later with `deploy_host=true` and `restart_service=false`
 - inspect `/etc/remnanode/remnanode.env`
 - set `NODE_PORT` to the same Node Port configured in the panel
 - set `SECRET_KEY` to the panel-provided secret payload
@@ -103,7 +104,7 @@ After the first successful deployment, later updates can use `restart_service=tr
 If you do not want GitHub Actions to SSH into the VPS:
 
 1. Run the workflow with `publish_release=true`.
-2. On the Alpine host, bootstrap once from the latest release assets.
+2. On the Alpine host, bootstrap once from the repository installer.
 3. For later upgrades, run `/usr/local/bin/remnanode-update-from-github`.
 
 This keeps GitHub Actions as the build and release plane only, while the VPS pulls updates itself.
@@ -131,14 +132,15 @@ That script:
 - installs `nodejs`, `gcompat`, `unzip`, and `supervisor` on Alpine
 - installs the latest Xray release for the current CPU architecture
 - ensures `/usr/local/bin/rw-core -> /usr/local/bin/xray`
-- downloads the latest host-tools and runtime bundles from GitHub Releases
+- downloads the latest runtime bundle from GitHub Releases
 - prompts for `NODE_PORT` and `SECRET_KEY`
+- writes the OpenRC and supervisord files directly on the host
 - writes `/etc/remnanode/remnanode.env`
 - installs and starts the `remnanode` OpenRC service
 
 ## Limitation
 
-The workflow can automate runtime delivery and host bootstrap, but it cannot guess missing Remnanode application env values.
+The workflow can automate runtime delivery, but it cannot guess missing Remnanode application env values.
 
 You still need to define the app-specific values in:
 

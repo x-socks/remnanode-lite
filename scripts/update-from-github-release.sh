@@ -12,9 +12,7 @@ fi
 
 REPO_SLUG="${REPO_SLUG:-}"
 RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-remnanode-runtime-latest.tar.gz}"
-HOST_TOOLS_ASSET_NAME="${HOST_TOOLS_ASSET_NAME:-remnanode-host-tools-latest.tar.gz}"
 BASE_DIR="${BASE_DIR:-/opt/remnanode}"
-UPDATE_HOST_TOOLS="${UPDATE_HOST_TOOLS:-0}"
 RESTART_SERVICE="${RESTART_SERVICE:-0}"
 
 require_cmd() {
@@ -66,17 +64,6 @@ runtime_url="https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_
 runtime_bundle="${WORK_DIR}/${RUNTIME_ASSET_NAME}"
 
 download_file "${runtime_url}" "${runtime_bundle}"
-
-if [ "${UPDATE_HOST_TOOLS}" = "1" ]; then
-    host_tools_url="https://github.com/${REPO_SLUG}/releases/latest/download/${HOST_TOOLS_ASSET_NAME}"
-    host_tools_bundle="${WORK_DIR}/${HOST_TOOLS_ASSET_NAME}"
-    host_tools_dir="${WORK_DIR}/host-tools"
-
-    download_file "${host_tools_url}" "${host_tools_bundle}"
-    mkdir -p "${host_tools_dir}"
-    tar -C "${host_tools_dir}" -xzf "${host_tools_bundle}"
-    sh "${host_tools_dir}/remnanode-host-tools/scripts/install-layout.sh" /
-fi
 
 /usr/local/bin/install-remnanode-runtime "${runtime_bundle}" "${BASE_DIR}"
 /usr/local/bin/check-remnanode-layout "${BASE_DIR}/current"

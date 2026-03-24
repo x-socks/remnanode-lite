@@ -25,12 +25,12 @@ on:
         default: ""
         type: string
       publish_release:
-        description: Publish the bundles as a GitHub release
+        description: Publish the runtime bundle as a GitHub release
         required: true
         default: false
         type: boolean
       deploy_host:
-        description: Copy bundles to the Alpine host and install them
+        description: Copy the runtime bundle to an already-bootstrapped Alpine host
         required: true
         default: false
         type: boolean
@@ -51,9 +51,7 @@ jobs:
     outputs:
       bundle_stamp: ${{ steps.vars.outputs.bundle_stamp }}
       runtime_bundle: ${{ steps.export.outputs.runtime_bundle }}
-      host_tools_bundle: ${{ steps.host_tools.outputs.host_tools_bundle }}
       runtime_bundle_latest: ${{ steps.aliases.outputs.runtime_bundle_latest }}
-      host_tools_bundle_latest: ${{ steps.aliases.outputs.host_tools_bundle_latest }}
       release_tag: ${{ steps.vars.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
@@ -107,27 +105,13 @@ jobs:
           runtime_bundle=$(cat "${RUNNER_TEMP}/runtime-bundle-path.txt")
           echo "runtime_bundle=${runtime_bundle}" >> "${GITHUB_OUTPUT}"
 
-      - name: Package host tools
-        id: host_tools
-        env:
-          BUNDLE_STAMP: ${{ steps.vars.outputs.bundle_stamp }}
-          BUNDLE_PATH_FILE: ${{ runner.temp }}/host-tools-bundle-path.txt
-        run: |
-          set -eu
-          ./scripts/package-host-tools.sh ./out
-          host_tools_bundle=$(cat "${RUNNER_TEMP}/host-tools-bundle-path.txt")
-          echo "host_tools_bundle=${host_tools_bundle}" >> "${GITHUB_OUTPUT}"
-
       - name: Prepare stable release asset names
         id: aliases
         run: |
           set -eu
           runtime_bundle_latest=./out/remnanode-runtime-latest.tar.gz
-          host_tools_bundle_latest=./out/remnanode-host-tools-latest.tar.gz
           cp "${{ steps.export.outputs.runtime_bundle }}" "${runtime_bundle_latest}"
-          cp "${{ steps.host_tools.outputs.host_tools_bundle }}" "${host_tools_bundle_latest}"
           echo "runtime_bundle_latest=${runtime_bundle_latest}" >> "${GITHUB_OUTPUT}"
-          echo "host_tools_bundle_latest=${host_tools_bundle_latest}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -135,9 +119,7 @@ jobs:
           name: remnanode-bundles-${{ steps.vars.outputs.bundle_stamp }}
           path: |
             ${{ steps.export.outputs.runtime_bundle }}
-            ${{ steps.host_tools.outputs.host_tools_bundle }}
             ${{ steps.aliases.outputs.runtime_bundle_latest }}
-            ${{ steps.aliases.outputs.host_tools_bundle_latest }}
           if-no-files-found: error
 
       - name: Publish GitHub release
@@ -148,9 +130,7 @@ jobs:
           set -eu
           gh release create "${{ steps.vars.outputs.release_tag }}" \
             "${{ steps.export.outputs.runtime_bundle }}" \
-            "${{ steps.host_tools.outputs.host_tools_bundle }}" \
             "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
-            "${{ steps.aliases.outputs.host_tools_bundle_latest }}" \
             --title "${{ steps.vars.outputs.release_tag }}" \
             --notes "Runtime bundle exported from ${{ steps.settings.outputs.image_ref }}"
 
@@ -195,11 +175,11 @@ jobs:
         run: |
           set -eu
           port="${DEPLOY_PORT:-22}"
-          remote_dir="/tmp/remnanode-ci-${{ needs.bundle.outputs.bundle_stamp }}"
+          remote_dir="/root/.remnanode-work/ci-${{ needs.bundle.outputs.bundle_stamp }}"
           ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${remote_dir}'"
           scp -P "${port}" ./artifacts/* "${DEPLOY_USER}@${DEPLOY_HOST}:${remote_dir}/"
 
-      - name: Bootstrap or update remote host
+      - name: Update remote host runtime
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
@@ -207,18 +187,18 @@ jobs:
         run: |
           set -eu
           port="${DEPLOY_PORT:-22}"
-          remote_dir="/tmp/remnanode-ci-${{ needs.bundle.outputs.bundle_stamp }}"
+          remote_dir="/root/.remnanode-work/ci-${{ needs.bundle.outputs.bundle_stamp }}"
           ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "
             set -eu
             cd '${remote_dir}'
             runtime_bundle=\$(find . -maxdepth 1 -name 'remnanode-runtime-*.tar.gz' | head -n 1)
-            tools_bundle=\$(find . -maxdepth 1 -name 'remnanode-host-tools-*.tar.gz' | head -n 1)
             [ -n \"\${runtime_bundle}\" ]
-            [ -n \"\${tools_bundle}\" ]
-            rm -rf tools
-            mkdir -p tools
-            tar -C tools -xzf \"\${tools_bundle}\"
-            sh tools/remnanode-host-tools/scripts/bootstrap-host.sh \"${remote_dir}/\${runtime_bundle#./}\" '${{ inputs.base_dir }}'
+            if [ ! -x /usr/local/bin/install-remnanode-runtime ]; then
+              echo 'remote host is not bootstrapped; run the one-click installer first' >&2
+              exit 1
+            fi
+            /usr/local/bin/install-remnanode-runtime \"${remote_dir}/\${runtime_bundle#./}\" '${{ inputs.base_dir }}'
+            /usr/local/bin/check-remnanode-layout '${{ inputs.base_dir }}/current'
             if [ '${{ inputs.restart_service }}' = 'true' ]; then
               rc-service remnanode restart
             fi

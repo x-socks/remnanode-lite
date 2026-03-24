@@ -9,8 +9,7 @@ fi
 
 REPO_SLUG="$1"
 BASE_DIR="${2:-/opt/remnanode}"
-RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-remnanode-runtime-latest.tar.gz}"
-HOST_TOOLS_ASSET_NAME="${HOST_TOOLS_ASSET_NAME:-remnanode-host-tools-latest.tar.gz}"
+RAW_REF="${RAW_REF:-main}"
 
 download_file() {
     url="$1"
@@ -42,11 +41,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-host_tools_bundle="${WORK_DIR}/${HOST_TOOLS_ASSET_NAME}"
-runtime_bundle="${WORK_DIR}/${RUNTIME_ASSET_NAME}"
+bootstrap_script="${WORK_DIR}/one-click-deploy.sh"
+download_file "https://raw.githubusercontent.com/${REPO_SLUG}/${RAW_REF}/scripts/one-click-deploy.sh" "${bootstrap_script}"
 
-download_file "https://github.com/${REPO_SLUG}/releases/latest/download/${HOST_TOOLS_ASSET_NAME}" "${host_tools_bundle}"
-download_file "https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_ASSET_NAME}" "${runtime_bundle}"
-
-tar -C "${WORK_DIR}" -xzf "${host_tools_bundle}"
-sh "${WORK_DIR}/remnanode-host-tools/scripts/bootstrap-host.sh" "${runtime_bundle}" "${BASE_DIR}"
+exec env BASE_DIR="${BASE_DIR}" sh "${bootstrap_script}" "${REPO_SLUG}"

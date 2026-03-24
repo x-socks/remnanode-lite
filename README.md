@@ -2,6 +2,8 @@
 
 Bare-metal deployment scaffold for running Remnanode on extremely constrained Alpine LXC VPS instances.
 
+GitHub Releases publish only the upstream Remnanode runtime bundle. Host bootstrap files are written directly by the installer script on the target machine.
+
 Quick install:
 
 ```sh
