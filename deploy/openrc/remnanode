@@ -1,0 +1,37 @@
+#!/sbin/openrc-run
+
+description="Remnanode bare-metal service"
+
+: "${command:=/usr/local/bin/remnanode-start}"
+: "${command_user:=remnanode:remnanode}"
+: "${directory:=/opt/remnanode/current}"
+: "${pidfile:=/run/remnanode.pid}"
+: "${output_log:=/var/log/remnanode/remnanode.log}"
+: "${error_log:=/var/log/remnanode/remnanode.err}"
+: "${respawn_delay:=5}"
+: "${respawn_max:=0}"
+
+supervisor=supervise-daemon
+command_background=true
+
+depend() {
+    need net localmount
+    after firewall
+    use dns logger
+}
+
+start_pre() {
+    checkpath -d -m 0755 -o "${command_user}" /var/log/remnanode
+    checkpath -f -m 0644 -o "${command_user}" "${output_log}"
+    checkpath -f -m 0644 -o "${command_user}" "${error_log}"
+
+    if [ ! -x "${command}" ]; then
+        eerror "Missing executable: ${command}"
+        return 1
+    fi
+
+    if [ ! -d "${directory}" ]; then
+        eerror "Missing application directory: ${directory}"
+        return 1
+    fi
+}

@@ -1,0 +1,199 @@
+name: Runtime Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: Docker image to export
+        required: true
+        default: remnawave/remnanode:latest
+        type: string
+      app_root:
+        description: Optional app root inside the image
+        required: false
+        default: ""
+        type: string
+      include_paths:
+        description: Optional override for exported paths
+        required: false
+        default: ""
+        type: string
+      publish_release:
+        description: Publish the bundles as a GitHub release
+        required: true
+        default: false
+        type: boolean
+      deploy_host:
+        description: Copy bundles to the Alpine host and install them
+        required: true
+        default: false
+        type: boolean
+      base_dir:
+        description: Remote installation base directory
+        required: true
+        default: /opt/remnanode
+        type: string
+      restart_service:
+        description: Restart remnanode after remote install
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    outputs:
+      bundle_stamp: ${{ steps.vars.outputs.bundle_stamp }}
+      runtime_bundle: ${{ steps.export.outputs.runtime_bundle }}
+      host_tools_bundle: ${{ steps.host_tools.outputs.host_tools_bundle }}
+      runtime_bundle_latest: ${{ steps.aliases.outputs.runtime_bundle_latest }}
+      host_tools_bundle_latest: ${{ steps.aliases.outputs.host_tools_bundle_latest }}
+      release_tag: ${{ steps.vars.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare metadata
+        id: vars
+        run: |
+          set -eu
+          short_sha=$(printf '%s' "${GITHUB_SHA}" | cut -c1-12)
+          bundle_stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
+          release_tag="runtime-${bundle_stamp}"
+          echo "bundle_stamp=${bundle_stamp}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/*.sh
+
+      - name: Pull upstream image
+        run: docker pull "${{ inputs.image_ref }}"
+
+      - name: Export runtime bundle
+        id: export
+        env:
+          APP_ROOT: ${{ inputs.app_root }}
+          INCLUDE_PATHS: ${{ inputs.include_paths }}
+          BUNDLE_STAMP: ${{ steps.vars.outputs.bundle_stamp }}
+          BUNDLE_PATH_FILE: ${{ runner.temp }}/runtime-bundle-path.txt
+        run: |
+          set -eu
+          ./scripts/export-runtime-bundle.sh "${{ inputs.image_ref }}" ./out
+          runtime_bundle=$(cat "${RUNNER_TEMP}/runtime-bundle-path.txt")
+          echo "runtime_bundle=${runtime_bundle}" >> "${GITHUB_OUTPUT}"
+
+      - name: Package host tools
+        id: host_tools
+        env:
+          BUNDLE_STAMP: ${{ steps.vars.outputs.bundle_stamp }}
+          BUNDLE_PATH_FILE: ${{ runner.temp }}/host-tools-bundle-path.txt
+        run: |
+          set -eu
+          ./scripts/package-host-tools.sh ./out
+          host_tools_bundle=$(cat "${RUNNER_TEMP}/host-tools-bundle-path.txt")
+          echo "host_tools_bundle=${host_tools_bundle}" >> "${GITHUB_OUTPUT}"
+
+      - name: Prepare stable release asset names
+        id: aliases
+        run: |
+          set -eu
+          runtime_bundle_latest=./out/remnanode-runtime-latest.tar.gz
+          host_tools_bundle_latest=./out/remnanode-host-tools-latest.tar.gz
+          cp "${{ steps.export.outputs.runtime_bundle }}" "${runtime_bundle_latest}"
+          cp "${{ steps.host_tools.outputs.host_tools_bundle }}" "${host_tools_bundle_latest}"
+          echo "runtime_bundle_latest=${runtime_bundle_latest}" >> "${GITHUB_OUTPUT}"
+          echo "host_tools_bundle_latest=${host_tools_bundle_latest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remnanode-bundles-${{ steps.vars.outputs.bundle_stamp }}
+          path: |
+            ${{ steps.export.outputs.runtime_bundle }}
+            ${{ steps.host_tools.outputs.host_tools_bundle }}
+            ${{ steps.aliases.outputs.runtime_bundle_latest }}
+            ${{ steps.aliases.outputs.host_tools_bundle_latest }}
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: ${{ inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          gh release create "${{ steps.vars.outputs.release_tag }}" \
+            "${{ steps.export.outputs.runtime_bundle }}" \
+            "${{ steps.host_tools.outputs.host_tools_bundle }}" \
+            "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
+            "${{ steps.aliases.outputs.host_tools_bundle_latest }}" \
+            --title "${{ steps.vars.outputs.release_tag }}" \
+            --notes "Runtime bundle exported from ${{ inputs.image_ref }}"
+
+  deploy:
+    if: ${{ inputs.deploy_host }}
+    needs: bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: remnanode-bundles-${{ needs.bundle.outputs.bundle_stamp }}
+          path: ./artifacts
+
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          : "${DEPLOY_HOST:?missing DEPLOY_HOST secret}"
+          : "${DEPLOY_USER:?missing DEPLOY_USER secret}"
+          : "${DEPLOY_SSH_KEY:?missing DEPLOY_SSH_KEY secret}"
+          mkdir -p "${HOME}/.ssh"
+          chmod 700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${HOME}/.ssh/id_ed25519"
+          chmod 600 "${HOME}/.ssh/id_ed25519"
+          if [ -n "${DEPLOY_KNOWN_HOSTS}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          else
+            port="${DEPLOY_PORT:-22}"
+            ssh-keyscan -p "${port}" "${DEPLOY_HOST}" > "${HOME}/.ssh/known_hosts"
+          fi
+
+      - name: Copy bundles to remote host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+          port="${DEPLOY_PORT:-22}"
+          remote_dir="/tmp/remnanode-ci-${{ needs.bundle.outputs.bundle_stamp }}"
+          ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${remote_dir}'"
+          scp -P "${port}" ./artifacts/* "${DEPLOY_USER}@${DEPLOY_HOST}:${remote_dir}/"
+
+      - name: Bootstrap or update remote host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+          port="${DEPLOY_PORT:-22}"
+          remote_dir="/tmp/remnanode-ci-${{ needs.bundle.outputs.bundle_stamp }}"
+          ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "
+            set -eu
+            cd '${remote_dir}'
+            runtime_bundle=\$(find . -maxdepth 1 -name 'remnanode-runtime-*.tar.gz' | head -n 1)
+            tools_bundle=\$(find . -maxdepth 1 -name 'remnanode-host-tools-*.tar.gz' | head -n 1)
+            [ -n \"\${runtime_bundle}\" ]
+            [ -n \"\${tools_bundle}\" ]
+            rm -rf tools
+            mkdir -p tools
+            tar -C tools -xzf \"\${tools_bundle}\"
+            sh tools/remnanode-host-tools/scripts/bootstrap-host.sh \"${remote_dir}/\${runtime_bundle#./}\" '${{ inputs.base_dir }}'
+            if [ '${{ inputs.restart_service }}' = 'true' ]; then
+              rc-service remnanode restart
+            fi
+          "

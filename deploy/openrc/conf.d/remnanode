@@ -1,0 +1,9 @@
+# OpenRC service configuration for Remnanode
+command=/usr/local/bin/remnanode-start
+command_user=remnanode:remnanode
+directory=/opt/remnanode/current
+pidfile=/run/remnanode.pid
+output_log=/var/log/remnanode/remnanode.log
+error_log=/var/log/remnanode/remnanode.err
+respawn_delay=5
+respawn_max=0

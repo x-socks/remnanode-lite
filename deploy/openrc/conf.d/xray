@@ -1,0 +1,9 @@
+# OpenRC service configuration for standalone Xray
+command=/usr/local/bin/xray-start
+command_user=remnanode:remnanode
+directory=/
+pidfile=/run/xray.pid
+output_log=/var/log/xray/xray.log
+error_log=/var/log/xray/xray.err
+respawn_delay=5
+respawn_max=0

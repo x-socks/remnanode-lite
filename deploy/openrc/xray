@@ -1,0 +1,32 @@
+#!/sbin/openrc-run
+
+description="Standalone Xray service for split-control deployments"
+
+: "${command:=/usr/local/bin/xray-start}"
+: "${command_user:=remnanode:remnanode}"
+: "${directory:=/}"
+: "${pidfile:=/run/xray.pid}"
+: "${output_log:=/var/log/xray/xray.log}"
+: "${error_log:=/var/log/xray/xray.err}"
+: "${respawn_delay:=5}"
+: "${respawn_max:=0}"
+
+supervisor=supervise-daemon
+command_background=true
+
+depend() {
+    need net localmount
+    after firewall
+    use dns logger
+}
+
+start_pre() {
+    checkpath -d -m 0755 -o "${command_user}" /var/log/xray
+    checkpath -f -m 0644 -o "${command_user}" "${output_log}"
+    checkpath -f -m 0644 -o "${command_user}" "${error_log}"
+
+    if [ ! -x "${command}" ]; then
+        eerror "Missing executable: ${command}"
+        return 1
+    fi
+}
