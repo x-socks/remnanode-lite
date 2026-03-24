@@ -60,6 +60,27 @@ prompt_required() {
     done
 }
 
+print_intro() {
+    cat >&2 <<'EOF'
+Remnanode one-click install
+
+This installer will:
+- install or verify Node.js 24, supervisor, gcompat, unzip, tar, and Xray
+- download the latest host-tools and runtime bundles from GitHub Releases
+- install the bare-metal layout under /opt/remnanode
+- write /etc/remnanode/remnanode.env
+- enable and start the OpenRC remnanode service
+
+You will be prompted for:
+- NODE_PORT: the Node Port configured in the Remnawave panel
+- SECRET_KEY: the full secret payload from the panel
+
+Accepted SECRET_KEY input:
+- the raw secret value
+- a full SECRET_KEY=... line
+EOF
+}
+
 normalize_secret_key() {
     input_value="$1"
 
@@ -160,6 +181,41 @@ update_key_value_file() {
     chmod 640 "${file_path}" 2>/dev/null || true
 }
 
+install_supervisord_config() {
+    cat > /etc/supervisord.conf <<'EOF'
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisor/supervisord.log
+pidfile=%(ENV_SUPERVISORD_PID_PATH)s
+childlogdir=/var/log/supervisor
+logfile_maxbytes=5MB
+logfile_backups=2
+loglevel=info
+silent=true
+
+[unix_http_server]
+file=%(ENV_SUPERVISORD_SOCKET_PATH)s
+username=%(ENV_SUPERVISORD_USER)s
+password=%(ENV_SUPERVISORD_PASSWORD)s
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
+
+[program:xray]
+command=/usr/local/bin/rw-core -config http+unix://%(ENV_INTERNAL_SOCKET_PATH)s/internal/get-config?token=%(ENV_INTERNAL_REST_TOKEN)s -format json
+autostart=false
+autorestart=false
+stderr_logfile=/var/log/supervisor/xray.err.log
+stdout_logfile=/var/log/supervisor/xray.out.log
+stdout_logfile_maxbytes=5MB
+stderr_logfile_maxbytes=5MB
+stdout_logfile_backups=0
+stderr_logfile_backups=0
+EOF
+    chmod 644 /etc/supervisord.conf
+}
+
 require_root
 ensure_apk_prereqs
 require_cmd tar
@@ -180,6 +236,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 install_xray
+print_intro
 
 NODE_PORT="$(prompt_required 'NODE_PORT (Node Port from panel): ' "${NODE_PORT}")"
 SECRET_INPUT="$(prompt_required 'SECRET_KEY value or full line from panel: ' "${SECRET_INPUT}")"
@@ -211,9 +268,7 @@ if [ ! -f /etc/xray/config.json ] && [ -f /etc/xray/config.json.example ]; then
     cp /etc/xray/config.json.example /etc/xray/config.json
 fi
 
-if [ -f "${HOST_TOOLS_DIR}/config/supervisor/supervisord.conf" ]; then
-    cp "${HOST_TOOLS_DIR}/config/supervisor/supervisord.conf" /etc/supervisord.conf
-fi
+install_supervisord_config
 
 mkdir -p /var/log/supervisor
 

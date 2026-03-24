@@ -81,8 +81,9 @@ If you want to stage into another root filesystem, use:
 For an interactive first-time install directly from GitHub Releases on Alpine:
 
 ```sh
+apk add --no-cache curl && \
 curl -fsSL -o /tmp/one-click-deploy.sh \
-  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh && \
 sh /tmp/one-click-deploy.sh
 ```
 
