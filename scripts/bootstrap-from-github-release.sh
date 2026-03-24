@@ -30,7 +30,11 @@ download_file() {
     exit 1
 }
 
-WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/remnanode-bootstrap.XXXXXX")
+WORK_ROOT="${HOME:-/root}/.remnanode-work"
+WORK_DIR="${WORK_ROOT}/bootstrap-release.$$"
+mkdir -p "${WORK_ROOT}"
+rm -rf "${WORK_DIR}"
+mkdir -p "${WORK_DIR}"
 
 cleanup() {
     rm -rf "${WORK_DIR}"

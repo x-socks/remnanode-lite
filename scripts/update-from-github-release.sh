@@ -47,11 +47,14 @@ if [ -z "${REPO_SLUG}" ]; then
     exit 1
 fi
 
-require_cmd mktemp
 require_cmd tar
 require_cmd sh
 
-WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/remnanode-release.XXXXXX")
+WORK_ROOT="${HOME:-/root}/.remnanode-work"
+WORK_DIR="${WORK_ROOT}/update-release.$$"
+mkdir -p "${WORK_ROOT}"
+rm -rf "${WORK_DIR}"
+mkdir -p "${WORK_DIR}"
 
 cleanup() {
     rm -rf "${WORK_DIR}"

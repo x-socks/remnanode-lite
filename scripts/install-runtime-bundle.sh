@@ -20,7 +20,6 @@ require_cmd() {
 }
 
 require_cmd tar
-require_cmd mktemp
 require_cmd date
 require_cmd ln
 require_cmd cp
@@ -33,7 +32,11 @@ fi
 
 mkdir -p "${RELEASES_DIR}"
 
-WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/remnanode-install.XXXXXX")
+WORK_ROOT="${HOME:-/root}/.remnanode-work"
+WORK_DIR="${WORK_ROOT}/install-runtime.$$"
+mkdir -p "${WORK_ROOT}"
+rm -rf "${WORK_DIR}"
+mkdir -p "${WORK_DIR}"
 
 cleanup() {
     rm -rf "${WORK_DIR}"
