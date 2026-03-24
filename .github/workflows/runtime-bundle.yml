@@ -4,6 +4,9 @@ permissions:
   contents: write
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       image_ref:
@@ -65,22 +68,42 @@ jobs:
           echo "bundle_stamp=${bundle_stamp}" >> "${GITHUB_OUTPUT}"
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
 
+      - name: Resolve workflow settings
+        id: settings
+        run: |
+          set -eu
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            image_ref="${{ inputs.image_ref }}"
+            app_root="${{ inputs.app_root }}"
+            include_paths="${{ inputs.include_paths }}"
+            publish_release="${{ inputs.publish_release }}"
+          else
+            image_ref="remnawave/node:latest"
+            app_root=""
+            include_paths=""
+            publish_release="true"
+          fi
+          echo "image_ref=${image_ref}" >> "${GITHUB_OUTPUT}"
+          echo "app_root=${app_root}" >> "${GITHUB_OUTPUT}"
+          echo "include_paths=${include_paths}" >> "${GITHUB_OUTPUT}"
+          echo "publish_release=${publish_release}" >> "${GITHUB_OUTPUT}"
+
       - name: Ensure scripts are executable
         run: chmod +x scripts/*.sh
 
       - name: Pull upstream image
-        run: docker pull "${{ inputs.image_ref }}"
+        run: docker pull "${{ steps.settings.outputs.image_ref }}"
 
       - name: Export runtime bundle
         id: export
         env:
-          APP_ROOT: ${{ inputs.app_root }}
-          INCLUDE_PATHS: ${{ inputs.include_paths }}
+          APP_ROOT: ${{ steps.settings.outputs.app_root }}
+          INCLUDE_PATHS: ${{ steps.settings.outputs.include_paths }}
           BUNDLE_STAMP: ${{ steps.vars.outputs.bundle_stamp }}
           BUNDLE_PATH_FILE: ${{ runner.temp }}/runtime-bundle-path.txt
         run: |
           set -eu
-          ./scripts/export-runtime-bundle.sh "${{ inputs.image_ref }}" ./out
+          ./scripts/export-runtime-bundle.sh "${{ steps.settings.outputs.image_ref }}" ./out
           runtime_bundle=$(cat "${RUNNER_TEMP}/runtime-bundle-path.txt")
           echo "runtime_bundle=${runtime_bundle}" >> "${GITHUB_OUTPUT}"
 
@@ -118,7 +141,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release
-        if: ${{ inputs.publish_release }}
+        if: ${{ steps.settings.outputs.publish_release == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -129,10 +152,10 @@ jobs:
             "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
             "${{ steps.aliases.outputs.host_tools_bundle_latest }}" \
             --title "${{ steps.vars.outputs.release_tag }}" \
-            --notes "Runtime bundle exported from ${{ inputs.image_ref }}"
+            --notes "Runtime bundle exported from ${{ steps.settings.outputs.image_ref }}"
 
   deploy:
-    if: ${{ inputs.deploy_host }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_host }}
     needs: bundle
     runs-on: ubuntu-latest
     steps:

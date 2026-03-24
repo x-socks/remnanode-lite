@@ -10,6 +10,11 @@ The intended split is:
 
 The workflow is in [.github/workflows/runtime-bundle.yml](../.github/workflows/runtime-bundle.yml).
 
+Current trigger model:
+
+- every push to `main` automatically exports the upstream runtime and publishes a fresh GitHub release
+- `workflow_dispatch` remains available for manual runs with custom image parameters and optional remote deploy
+
 If you want the workflow to create GitHub releases, the workflow token must have release write access. This repository workflow requests:
 
 - `contents: write`
