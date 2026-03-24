@@ -6,7 +6,7 @@ on:
       image_ref:
         description: Docker image to export
         required: true
-        default: remnawave/remnanode:latest
+        default: remnawave/node:latest
         type: string
       app_root:
         description: Optional app root inside the image

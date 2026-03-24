@@ -7,7 +7,7 @@ This workflow is for the real bottleneck in 256 MB Alpine guests: never build on
 Run this on a separate machine that already has the upstream image available locally:
 
 ```sh
-./scripts/export-runtime-bundle.sh remnawave/remnanode:latest
+./scripts/export-runtime-bundle.sh remnawave/node:latest
 ```
 
 What the script does:
@@ -36,14 +36,14 @@ The defaults are intentionally broader than the minimum so the extracted runtime
 If the official image uses a non-standard app root, set it explicitly:
 
 ```sh
-APP_ROOT=/usr/src/app ./scripts/export-runtime-bundle.sh remnawave/remnanode:latest
+APP_ROOT=/usr/src/app ./scripts/export-runtime-bundle.sh remnawave/node:latest
 ```
 
 If you need extra files:
 
 ```sh
 INCLUDE_PATHS="dist node_modules package.json prisma templates" \
-./scripts/export-runtime-bundle.sh remnawave/remnanode:latest
+./scripts/export-runtime-bundle.sh remnawave/node:latest
 ```
 
 ## 2. Transfer the Bundle
