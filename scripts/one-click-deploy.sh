@@ -52,7 +52,7 @@ prompt_required() {
     fi
 
     while :; do
-        printf '%s' "${prompt_text}"
+        printf '%s' "${prompt_text}" >&2
         IFS= read -r input_value
         if [ -n "${input_value}" ]; then
             printf '%s\n' "${input_value}"
