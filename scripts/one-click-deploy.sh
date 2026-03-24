@@ -211,7 +211,7 @@ if [ ! -f /etc/xray/config.json ] && [ -f /etc/xray/config.json.example ]; then
     cp /etc/xray/config.json.example /etc/xray/config.json
 fi
 
-if [ ! -f /etc/supervisord.conf ] && [ -f "${HOST_TOOLS_DIR}/config/supervisor/supervisord.conf" ]; then
+if [ -f "${HOST_TOOLS_DIR}/config/supervisor/supervisord.conf" ]; then
     cp "${HOST_TOOLS_DIR}/config/supervisor/supervisord.conf" /etc/supervisord.conf
 fi
 

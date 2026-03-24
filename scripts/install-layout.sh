@@ -70,7 +70,7 @@ install_file "${REPO_ROOT}/deploy/openrc/remnanode" /etc/init.d/remnanode 755
 install_file "${REPO_ROOT}/deploy/openrc/xray" /etc/init.d/xray 755
 install_file "${REPO_ROOT}/deploy/openrc/conf.d/remnanode" /etc/conf.d/remnanode 644
 install_file "${REPO_ROOT}/deploy/openrc/conf.d/xray" /etc/conf.d/xray 644
-install_if_missing "${REPO_ROOT}/config/supervisor/supervisord.conf" /etc/supervisord.conf 644
+install_file "${REPO_ROOT}/config/supervisor/supervisord.conf" /etc/supervisord.conf 644
 install_if_missing "${REPO_ROOT}/deploy/env/remnanode.env.example" /etc/remnanode/remnanode.env 640
 install_if_missing "${REPO_ROOT}/deploy/env/xray.env.example" /etc/remnanode/xray.env 640
 install_if_missing "${REPO_ROOT}/deploy/env/github-release.env.example" /etc/remnanode/github-release.env 640
