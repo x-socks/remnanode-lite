@@ -121,9 +121,9 @@ If you prefer an interactive host-side installer, use:
 
 ```sh
 apk add --no-cache curl && \
-curl -fsSL -o /tmp/one-click-deploy.sh \
+curl -fsSL -o /root/one-click-deploy.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh && \
-sh /tmp/one-click-deploy.sh
+sh /root/one-click-deploy.sh
 ```
 
 That script:

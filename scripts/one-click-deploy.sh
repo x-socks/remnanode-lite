@@ -316,7 +316,7 @@ require_node_24
 
 TMP_BASE="${HOME:-/root}"
 mkdir -p "${TMP_BASE}"
-WORK_DIR=$(mktemp -d "${TMP_BASE}/remnanode-one-click.XXXXXX")
+WORK_DIR=$(mktemp -d -p "${TMP_BASE}" remnanode-one-click.XXXXXX)
 
 cleanup() {
     rm -rf "${WORK_DIR}"
