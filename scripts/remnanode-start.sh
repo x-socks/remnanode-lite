@@ -28,9 +28,9 @@ RNDSTR="$(generate_random 10)"
 SUPERVISORD_USER="${SUPERVISORD_USER:-$(generate_random 64)}"
 SUPERVISORD_PASSWORD="${SUPERVISORD_PASSWORD:-$(generate_random 64)}"
 INTERNAL_REST_TOKEN="${INTERNAL_REST_TOKEN:-$(generate_random 64)}"
-INTERNAL_SOCKET_PATH="${INTERNAL_SOCKET_PATH:-/run/remnanode-internal-${RNDSTR}.sock}"
-SUPERVISORD_SOCKET_PATH="${SUPERVISORD_SOCKET_PATH:-/run/supervisord-${RNDSTR}.sock}"
-SUPERVISORD_PID_PATH="${SUPERVISORD_PID_PATH:-/run/supervisord-${RNDSTR}.pid}"
+INTERNAL_SOCKET_PATH="${INTERNAL_SOCKET_PATH:-/run/remnanode-internal.sock}"
+SUPERVISORD_SOCKET_PATH="${SUPERVISORD_SOCKET_PATH:-/run/supervisord.sock}"
+SUPERVISORD_PID_PATH="${SUPERVISORD_PID_PATH:-/run/supervisord.pid}"
 
 export NODE_PORT SECRET_KEY XTLS_API_PORT
 export SUPERVISORD_USER SUPERVISORD_PASSWORD INTERNAL_REST_TOKEN
@@ -58,12 +58,24 @@ export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
 export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-1}"
 export XRAY_CORE_VERSION="$([ -x /usr/local/bin/rw-core ] && /usr/local/bin/rw-core version | head -n 1 || true)"
 
-rm -f /run/remnanode-internal-*.sock /run/supervisord-*.sock /run/supervisord-*.pid 2>/dev/null || true
+rm -f "${INTERNAL_SOCKET_PATH}" "${SUPERVISORD_SOCKET_PATH}" "${SUPERVISORD_PID_PATH}" 2>/dev/null || true
 pkill -x supervisord 2>/dev/null || true
 
 if command -v supervisord >/dev/null 2>&1; then
     supervisord -c /etc/supervisord.conf &
-    sleep 1
+    wait_seconds="${SUPERVISORD_START_TIMEOUT:-10}"
+    while [ "${wait_seconds}" -gt 0 ]; do
+        if [ -S "${SUPERVISORD_SOCKET_PATH}" ]; then
+            break
+        fi
+        sleep 1
+        wait_seconds=$((wait_seconds - 1))
+    done
+
+    if [ ! -S "${SUPERVISORD_SOCKET_PATH}" ]; then
+        echo "remnanode-start: supervisord socket not ready: ${SUPERVISORD_SOCKET_PATH}" >&2
+        exit 1
+    fi
 fi
 
 cd "${APP_DIR}"
