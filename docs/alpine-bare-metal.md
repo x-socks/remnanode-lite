@@ -2,10 +2,20 @@
 
 This layout is tuned for Alpine LXC guests where Docker, PM2, and local NestJS builds are too expensive.
 
+The currently validated host state is:
+
+- Alpine `3.23.x`
+- Node.js `24.x`
+- `supervisor` installed, with `/etc/supervisord.conf`
+- Xray installed locally and linked as `/usr/local/bin/rw-core`
+- OpenRC `remnanode` service running as `root:root`
+- Remnanode runtime extracted from the official `remnawave/node` image
+
 ## 1. Assumptions
 
-- `node` is already available on the host, ideally Node.js 20 LTS.
-- `xray` is already available on the host, ideally under `/usr/local/bin/xray`.
+- `node` is already available on the host, ideally Node.js 24.x to match the official `remnawave/node` image.
+- `supervisord` is available on the host.
+- `xray` is already available on the host, ideally under `/usr/local/bin/xray`, with `/usr/local/bin/rw-core` pointing at it.
 - Remnanode runtime files are extracted from the official image into `/opt/remnanode/current`.
 - The extracted runtime contains at least:
   - `dist/`
@@ -31,7 +41,7 @@ Run a lightweight host preflight first:
 ./scripts/preflight-alpine.sh
 ```
 
-Create the dedicated service account on the Alpine host:
+Create the dedicated helper account on the Alpine host:
 
 ```sh
 ./scripts/create-service-user.sh
@@ -56,6 +66,7 @@ That installs:
 - `/etc/init.d/xray`
 - `/etc/conf.d/remnanode`
 - `/etc/conf.d/xray`
+- `/etc/supervisord.conf`
 - `/etc/remnanode/remnanode.env`
 - `/etc/remnanode/xray.env`
 - `/etc/remnanode/github-release.env`
@@ -77,8 +88,8 @@ sh /tmp/one-click-deploy.sh
 
 The script prompts for:
 
-- `APP_PORT`
-- `SSL_CERT`
+- `NODE_PORT`
+- `SECRET_KEY`
 
 ## 3. Configure Remnanode
 
@@ -88,8 +99,9 @@ Important values:
 
 - `REMNANODE_APP_DIR=/opt/remnanode/current`
 - `REMNANODE_ENTRYPOINT=dist/src/main.js`
-- `APP_PORT=<the same Node Port configured in the panel>`
-- `SSL_CERT=...` copied as a full line from the panel
+- `NODE_PORT=<the same Node Port configured in the panel>`
+- `SECRET_KEY=<panel-provided secret payload>`
+- `XTLS_API_PORT=61000`
 - `XRAY_BIN=/usr/local/bin/xray`
 
 Low-memory defaults are already set conservatively:
@@ -101,9 +113,9 @@ Low-memory defaults are already set conservatively:
 
 Do not raise memory flags unless you have measured headroom. On a 256 MB host, bigger heaps usually make OOM kills more likely, not less.
 
-`APP_PORT` is the key listener variable for the current `@remnawave/node` runtime. Set it to the same Node Port you configured in the Remnawave panel.
+The current `@remnawave/node` runtime actually consumes `NODE_PORT` and `SECRET_KEY`.
 
-`SSL_CERT` must be copied from the panel as a full `SSL_CERT=...` line. Do not truncate it and do not paste only the value label.
+If you paste from the panel, copy the full secret value. The installer accepts the raw value or a full `SECRET_KEY=...` line.
 
 ## 3.1 Extract Runtime From the Official Image
 
@@ -130,7 +142,7 @@ For a repeatable extraction and update workflow, see [docs/runtime-bundle-workfl
 
 There are two supported patterns:
 
-1. Recommended: let Remnanode spawn Xray itself.
+1. Recommended: let Remnanode manage Xray through `supervisord`.
 2. Optional: run Xray as its own OpenRC service for debugging or a split-control setup.
 
 For the default pattern, ensure only these are correct:
@@ -166,6 +178,9 @@ Logs:
 
 - `/var/log/remnanode/remnanode.log`
 - `/var/log/remnanode/remnanode.err`
+- `/var/log/supervisor/supervisord.log`
+- `/var/log/supervisor/xray.out.log`
+- `/var/log/supervisor/xray.err.log`
 - `/var/log/xray/xray.log`
 - `/var/log/xray/xray.err`
 
@@ -185,12 +200,13 @@ Manual service validation:
 
 If Remnanode exits immediately, check:
 
-- `APP_PORT` is set and matches the panel
-- `SSL_CERT` exists as a full line copied from the panel
+- `NODE_PORT` is set and matches the panel
+- `SECRET_KEY` is present and untruncated
 - the entrypoint path exists
 - `node_modules` is present
 - the env file values match the extracted runtime layout
-- `xray` is executable by the service user
+- `/usr/local/bin/rw-core` exists
+- `supervisord` is installed and readable by the service process
 
 Host preflight can be rerun at any time:
 
@@ -204,7 +220,7 @@ Keep these habits:
 
 - Avoid shell sessions and background tools you do not need.
 - Do not build NestJS on the host.
-- Prefer one service process tree, not multiple supervisors.
+- Keep one service process tree: OpenRC -> Remnanode -> supervisord -> Xray.
 - Keep `GOMAXPROCS=1` for standalone Xray unless profiling proves otherwise.
 - Keep file descriptor limits high to avoid fork and socket churn failures.
 

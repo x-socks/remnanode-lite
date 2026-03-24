@@ -86,8 +86,8 @@ For the first host bring-up:
 
 - run the workflow with `deploy_host=true` and `restart_service=false`
 - inspect `/etc/remnanode/remnanode.env`
-- copy the panel-provided `SSL_CERT=...` line into `/etc/remnanode/remnanode.env`
-- set `APP_PORT` to the same Node Port configured in the panel
+- set `NODE_PORT` to the same Node Port configured in the panel
+- set `SECRET_KEY` to the panel-provided secret payload
 - verify Xray paths and any remaining app-specific variables
 - start the service manually once the env is correct
 
@@ -108,8 +108,8 @@ For the first rollout in this model:
 - run the workflow with `publish_release=true`
 - on the Alpine host run the bootstrap script against your GitHub repo
 - verify `/etc/remnanode/remnanode.env`
-- add the panel-provided `SSL_CERT=...` line
-- set `APP_PORT` to the panel Node Port
+- set `NODE_PORT` to the panel Node Port
+- set `SECRET_KEY` to the panel secret payload
 - start `remnanode` manually
 
 If you prefer an interactive host-side installer, use:
@@ -122,10 +122,11 @@ sh /tmp/one-click-deploy.sh
 
 That script:
 
-- installs `nodejs`, `gcompat`, and `unzip` on Alpine
+- installs `nodejs`, `gcompat`, `unzip`, and `supervisor` on Alpine
 - installs the latest Xray release for the current CPU architecture
+- ensures `/usr/local/bin/rw-core -> /usr/local/bin/xray`
 - downloads the latest host-tools and runtime bundles from GitHub Releases
-- prompts for `APP_PORT` and `SSL_CERT`
+- prompts for `NODE_PORT` and `SECRET_KEY`
 - writes `/etc/remnanode/remnanode.env`
 - installs and starts the `remnanode` OpenRC service
 
@@ -139,8 +140,8 @@ You still need to define the app-specific values in:
 
 For the current `@remnawave/node` runtime, that explicitly includes:
 
-- `APP_PORT`
-- `SSL_CERT`
+- `NODE_PORT`
+- `SECRET_KEY`
 
 That is why the first rollout should usually avoid auto-restart until the env file is confirmed.
 

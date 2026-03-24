@@ -6,6 +6,37 @@ ROOT="${1:-/}"
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "${SELF_DIR}/.." && pwd)
 
+set_owner_if_exists() {
+    owner_spec="$1"
+    target_path="$2"
+
+    if id remnanode >/dev/null 2>&1; then
+        chown "${owner_spec}" "${target_path}"
+    fi
+}
+
+fix_remnanode_permissions() {
+    if ! id remnanode >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ -d "${ROOT}/etc/remnanode" ]; then
+        chown root:remnanode "${ROOT}/etc/remnanode"
+        chmod 750 "${ROOT}/etc/remnanode"
+    fi
+
+    for env_file in \
+        "${ROOT}/etc/remnanode/remnanode.env" \
+        "${ROOT}/etc/remnanode/xray.env" \
+        "${ROOT}/etc/remnanode/github-release.env"
+    do
+        if [ -f "${env_file}" ]; then
+            chown root:remnanode "${env_file}"
+            chmod 640 "${env_file}"
+        fi
+    done
+}
+
 install_file() {
     src="$1"
     dst="$2"
@@ -39,6 +70,7 @@ install_file "${REPO_ROOT}/deploy/openrc/remnanode" /etc/init.d/remnanode 755
 install_file "${REPO_ROOT}/deploy/openrc/xray" /etc/init.d/xray 755
 install_file "${REPO_ROOT}/deploy/openrc/conf.d/remnanode" /etc/conf.d/remnanode 644
 install_file "${REPO_ROOT}/deploy/openrc/conf.d/xray" /etc/conf.d/xray 644
+install_if_missing "${REPO_ROOT}/config/supervisor/supervisord.conf" /etc/supervisord.conf 644
 install_if_missing "${REPO_ROOT}/deploy/env/remnanode.env.example" /etc/remnanode/remnanode.env 640
 install_if_missing "${REPO_ROOT}/deploy/env/xray.env.example" /etc/remnanode/xray.env 640
 install_if_missing "${REPO_ROOT}/deploy/env/github-release.env.example" /etc/remnanode/github-release.env 640
@@ -48,5 +80,8 @@ install -d -m 755 "${ROOT}/etc/remnanode"
 install -d -m 755 "${ROOT}/etc/xray"
 install -d -m 755 "${ROOT}/var/log/remnanode"
 install -d -m 755 "${ROOT}/var/log/xray"
+install -d -m 755 "${ROOT}/var/log/supervisor"
+
+fix_remnanode_permissions
 
 printf '%s\n' "Installed deployment layout into ${ROOT}"

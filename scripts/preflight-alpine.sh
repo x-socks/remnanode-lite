@@ -89,8 +89,8 @@ check_node() {
             warn "unable to parse Node.js major version"
             ;;
         *)
-            if [ "${major}" -lt 20 ]; then
-                warn "Node.js major version is below 20"
+            if [ "${major}" -lt 24 ]; then
+                warn "Node.js major version is below 24"
             fi
             ;;
     esac
@@ -103,6 +103,22 @@ check_xray() {
         ok "path /usr/local/bin/xray"
     else
         fail "missing xray binary"
+    fi
+}
+
+check_rw_core() {
+    if [ -x /usr/local/bin/rw-core ]; then
+        ok "path /usr/local/bin/rw-core"
+    else
+        warn "missing /usr/local/bin/rw-core symlink"
+    fi
+}
+
+check_supervisord() {
+    if has_cmd supervisord; then
+        ok "command supervisord"
+    else
+        warn "missing command supervisord"
     fi
 }
 
@@ -142,6 +158,8 @@ check_swap
 check_openrc
 check_node
 check_xray
+check_rw_core
+check_supervisord
 check_gcompat
 check_ulimit
 

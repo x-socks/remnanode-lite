@@ -127,8 +127,8 @@ If the host has been configured for pull-based updates:
 
 Updating the runtime bundle does not replace your application-specific env choices. Keep `/etc/remnanode/remnanode.env` aligned with the panel, especially:
 
-- `APP_PORT`
-- `SSL_CERT`
+- `NODE_PORT`
+- `SECRET_KEY`
 
 ## 5. Roll Back
 

@@ -2,13 +2,20 @@
 
 Bare-metal deployment scaffold for running Remnanode on extremely constrained Alpine LXC VPS instances.
 
-This repository assumes:
+Validated target state:
 
-- Alpine Linux with OpenRC
+- Alpine Linux `3.23.x` with OpenRC
 - 256 MB RAM, no swap
 - NAT networking with only a small high-port window available
-- Remnanode is started directly from prebuilt artifacts extracted from the official image
-- Xray binary is installed locally, and by default Remnanode is allowed to spawn/manage it
+- Remnanode is started directly from prebuilt artifacts extracted from the official `remnawave/node` image
+- Node.js matches the upstream runtime, currently `24.x`
+- `supervisord` is present and Xray is launched through the same process tree
+- Xray is installed locally and available as both `/usr/local/bin/xray` and `/usr/local/bin/rw-core`
+- The OpenRC `remnanode` service runs as `root:root`
+
+Runtime config note:
+
+- The current runtime actually consumes `NODE_PORT` and `SECRET_KEY`
 
 Start with [docs/alpine-bare-metal.md](docs/alpine-bare-metal.md).
 

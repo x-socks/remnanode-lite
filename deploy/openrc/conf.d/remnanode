@@ -1,6 +1,6 @@
 # OpenRC service configuration for Remnanode
 command=/usr/local/bin/remnanode-start
-command_user=remnanode:remnanode
+command_user=root:root
 directory=/opt/remnanode/current
 pidfile=/run/remnanode.pid
 output_log=/var/log/remnanode/remnanode.log
