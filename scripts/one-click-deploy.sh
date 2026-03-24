@@ -314,7 +314,9 @@ require_cmd rc-service
 require_cmd rc-update
 require_node_24
 
-WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/remnanode-one-click.XXXXXX")
+TMP_BASE="${HOME:-/root}"
+mkdir -p "${TMP_BASE}"
+WORK_DIR=$(mktemp -d "${TMP_BASE}/remnanode-one-click.XXXXXX")
 
 cleanup() {
     rm -rf "${WORK_DIR}"
