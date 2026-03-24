@@ -14,6 +14,15 @@ curl -fsSL -o /root/one-click-deploy.sh \
 sh /root/one-click-deploy.sh
 ```
 
+Quick upgrade:
+
+```sh
+apk add --no-cache curl && \
+curl -fsSL -o /root/one-click-upgrade.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-upgrade.sh && \
+sh /root/one-click-upgrade.sh
+```
+
 Validated target state:
 
 - Alpine Linux `3.23.x` with OpenRC
