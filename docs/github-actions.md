@@ -86,7 +86,9 @@ For the first host bring-up:
 
 - run the workflow with `deploy_host=true` and `restart_service=false`
 - inspect `/etc/remnanode/remnanode.env`
-- verify Xray paths, ports, and any app-specific variables
+- copy the panel-provided `SSL_CERT=...` line into `/etc/remnanode/remnanode.env`
+- set `APP_PORT` to the same Node Port configured in the panel
+- verify Xray paths and any remaining app-specific variables
 - start the service manually once the env is correct
 
 After the first successful deployment, later updates can use `restart_service=true`.
@@ -106,6 +108,8 @@ For the first rollout in this model:
 - run the workflow with `publish_release=true`
 - on the Alpine host run the bootstrap script against your GitHub repo
 - verify `/etc/remnanode/remnanode.env`
+- add the panel-provided `SSL_CERT=...` line
+- set `APP_PORT` to the panel Node Port
 - start `remnanode` manually
 
 ## Limitation
@@ -115,6 +119,11 @@ The workflow can automate runtime delivery and host bootstrap, but it cannot gue
 You still need to define the app-specific values in:
 
 - `/etc/remnanode/remnanode.env`
+
+For the current `@remnawave/node` runtime, that explicitly includes:
+
+- `APP_PORT`
+- `SSL_CERT`
 
 That is why the first rollout should usually avoid auto-restart until the env file is confirmed.
 

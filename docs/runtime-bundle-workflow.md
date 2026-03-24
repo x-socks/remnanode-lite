@@ -125,6 +125,11 @@ If the host has been configured for pull-based updates:
 /usr/local/bin/remnanode-update-from-github
 ```
 
+Updating the runtime bundle does not replace your application-specific env choices. Keep `/etc/remnanode/remnanode.env` aligned with the panel, especially:
+
+- `APP_PORT`
+- `SSL_CERT`
+
 ## 5. Roll Back
 
 Because each deployment lands in its own release directory, rollbacks are symlink-only:

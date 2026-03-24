@@ -75,9 +75,9 @@ Important values:
 
 - `REMNANODE_APP_DIR=/opt/remnanode/current`
 - `REMNANODE_ENTRYPOINT=dist/src/main.js`
+- `APP_PORT=<the same Node Port configured in the panel>`
+- `SSL_CERT=...` copied as a full line from the panel
 - `XRAY_BIN=/usr/local/bin/xray`
-- `PORT=<one of your NAT-exposed ports>`
-- `HOST=0.0.0.0`
 
 Low-memory defaults are already set conservatively:
 
@@ -87,6 +87,10 @@ Low-memory defaults are already set conservatively:
 - `REMNANODE_ULIMIT_NOFILE=65535`
 
 Do not raise memory flags unless you have measured headroom. On a 256 MB host, bigger heaps usually make OOM kills more likely, not less.
+
+`APP_PORT` is the key listener variable for the current `@remnawave/node` runtime. Set it to the same Node Port you configured in the Remnawave panel.
+
+`SSL_CERT` must be copied from the panel as a full `SSL_CERT=...` line. Do not truncate it and do not paste only the value label.
 
 ## 3.1 Extract Runtime From the Official Image
 
@@ -168,6 +172,8 @@ Manual service validation:
 
 If Remnanode exits immediately, check:
 
+- `APP_PORT` is set and matches the panel
+- `SSL_CERT` exists as a full line copied from the panel
 - the entrypoint path exists
 - `node_modules` is present
 - the env file values match the extracted runtime layout
