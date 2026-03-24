@@ -112,6 +112,23 @@ For the first rollout in this model:
 - set `APP_PORT` to the panel Node Port
 - start `remnanode` manually
 
+If you prefer an interactive host-side installer, use:
+
+```sh
+curl -fsSL -o /tmp/one-click-deploy.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh
+sh /tmp/one-click-deploy.sh
+```
+
+That script:
+
+- installs `nodejs`, `gcompat`, and `unzip` on Alpine
+- installs the latest Xray release for the current CPU architecture
+- downloads the latest host-tools and runtime bundles from GitHub Releases
+- prompts for `APP_PORT` and `SSL_CERT`
+- writes `/etc/remnanode/remnanode.env`
+- installs and starts the `remnanode` OpenRC service
+
 ## Limitation
 
 The workflow can automate runtime delivery and host bootstrap, but it cannot guess missing Remnanode application env values.

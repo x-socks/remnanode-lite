@@ -67,6 +67,19 @@ If you want to stage into another root filesystem, use:
 ./scripts/install-layout.sh /my/chroot
 ```
 
+For an interactive first-time install directly from GitHub Releases on Alpine:
+
+```sh
+curl -fsSL -o /tmp/one-click-deploy.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh
+sh /tmp/one-click-deploy.sh
+```
+
+The script prompts for:
+
+- `APP_PORT`
+- `SSL_CERT`
+
 ## 3. Configure Remnanode
 
 Edit `/etc/remnanode/remnanode.env`.

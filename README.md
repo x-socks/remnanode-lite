@@ -15,3 +15,5 @@ Start with [docs/alpine-bare-metal.md](docs/alpine-bare-metal.md).
 For image extraction and host updates, also see [docs/runtime-bundle-workflow.md](docs/runtime-bundle-workflow.md).
 
 For CI-driven export and remote deployment, see [docs/github-actions.md](docs/github-actions.md).
+
+For first-time interactive host setup, you can also use [scripts/one-click-deploy.sh](scripts/one-click-deploy.sh).

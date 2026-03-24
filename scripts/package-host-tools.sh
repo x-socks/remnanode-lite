@@ -61,6 +61,7 @@ copy_into_stage scripts/preflight-alpine.sh
 copy_into_stage scripts/check-remnanode-layout.sh
 copy_into_stage scripts/update-from-github-release.sh
 copy_into_stage scripts/bootstrap-from-github-release.sh
+copy_into_stage scripts/one-click-deploy.sh
 copy_into_stage scripts/remnanode-start.sh
 copy_into_stage scripts/xray-start.sh
 copy_into_stage scripts/bootstrap-host.sh

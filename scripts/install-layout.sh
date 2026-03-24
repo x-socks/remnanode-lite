@@ -34,6 +34,7 @@ install_file "${REPO_ROOT}/scripts/install-runtime-bundle.sh" /usr/local/bin/ins
 install_file "${REPO_ROOT}/scripts/preflight-alpine.sh" /usr/local/bin/remnanode-preflight 755
 install_file "${REPO_ROOT}/scripts/check-remnanode-layout.sh" /usr/local/bin/check-remnanode-layout 755
 install_file "${REPO_ROOT}/scripts/update-from-github-release.sh" /usr/local/bin/remnanode-update-from-github 755
+install_file "${REPO_ROOT}/scripts/one-click-deploy.sh" /usr/local/bin/remnanode-one-click-deploy 755
 install_file "${REPO_ROOT}/deploy/openrc/remnanode" /etc/init.d/remnanode 755
 install_file "${REPO_ROOT}/deploy/openrc/xray" /etc/init.d/xray 755
 install_file "${REPO_ROOT}/deploy/openrc/conf.d/remnanode" /etc/conf.d/remnanode 644
