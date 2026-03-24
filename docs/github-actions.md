@@ -10,6 +10,15 @@ The intended split is:
 
 The workflow is in [.github/workflows/runtime-bundle.yml](../.github/workflows/runtime-bundle.yml).
 
+If you want the workflow to create GitHub releases, the workflow token must have release write access. This repository workflow requests:
+
+- `contents: write`
+
+If release creation still fails with `Resource not accessible by integration`, check the repository setting:
+
+- `Settings` -> `Actions` -> `General` -> `Workflow permissions`
+- choose `Read and write permissions`
+
 When `publish_release=true`, each release contains both stamped assets and stable alias assets:
 
 - `remnanode-runtime-latest.tar.gz`
