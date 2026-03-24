@@ -4,9 +4,8 @@ permissions:
   contents: write
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       image_ref:
@@ -27,7 +26,7 @@ on:
       publish_release:
         description: Publish the runtime bundle as a GitHub release
         required: true
-        default: false
+        default: true
         type: boolean
       deploy_host:
         description: Copy the runtime bundle to an already-bootstrapped Alpine host
@@ -53,6 +52,9 @@ jobs:
       runtime_bundle: ${{ steps.export.outputs.runtime_bundle }}
       runtime_bundle_latest: ${{ steps.aliases.outputs.runtime_bundle_latest }}
       release_tag: ${{ steps.vars.outputs.release_tag }}
+      should_export: ${{ steps.check.outputs.should_export }}
+      image_ref: ${{ steps.settings.outputs.image_ref }}
+      image_digest: ${{ steps.image.outputs.image_digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -75,16 +77,19 @@ jobs:
             app_root="${{ inputs.app_root }}"
             include_paths="${{ inputs.include_paths }}"
             publish_release="${{ inputs.publish_release }}"
+            monitor_only="false"
           else
             image_ref="remnawave/node:latest"
             app_root=""
             include_paths=""
             publish_release="true"
+            monitor_only="true"
           fi
           echo "image_ref=${image_ref}" >> "${GITHUB_OUTPUT}"
           echo "app_root=${app_root}" >> "${GITHUB_OUTPUT}"
           echo "include_paths=${include_paths}" >> "${GITHUB_OUTPUT}"
           echo "publish_release=${publish_release}" >> "${GITHUB_OUTPUT}"
+          echo "monitor_only=${monitor_only}" >> "${GITHUB_OUTPUT}"
 
       - name: Ensure scripts are executable
         run: chmod +x scripts/*.sh
@@ -92,11 +97,51 @@ jobs:
       - name: Pull upstream image
         run: docker pull "${{ steps.settings.outputs.image_ref }}"
 
+      - name: Resolve upstream image digest
+        id: image
+        run: |
+          set -eu
+          repo_digest=$(docker image inspect --format '{{join .RepoDigests "\n"}}' "${{ steps.settings.outputs.image_ref }}" | head -n 1)
+          if [ -z "${repo_digest}" ]; then
+            echo "unable to resolve upstream repo digest" >&2
+            exit 1
+          fi
+          image_digest="${repo_digest#*@}"
+          echo "repo_digest=${repo_digest}" >> "${GITHUB_OUTPUT}"
+          echo "image_digest=${image_digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check whether upstream runtime changed
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          latest_body=""
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" >/tmp/remnanode-latest-release.json 2>/dev/null; then
+            latest_body=$(python3 -c "import json; print(json.load(open('/tmp/remnanode-latest-release.json', 'r', encoding='utf-8')).get('body', ''))")
+          fi
+
+          previous_digest=$(printf '%s\n' "${latest_body}" | sed -n 's/^image_digest=//p' | head -n 1)
+
+          if [ "${{ steps.settings.outputs.monitor_only }}" = "true" ] && [ -n "${previous_digest}" ] && [ "${previous_digest}" = "${{ steps.image.outputs.image_digest }}" ]; then
+            echo "should_export=false" >> "${GITHUB_OUTPUT}"
+            echo "upstream digest unchanged: ${previous_digest}"
+          else
+            echo "should_export=true" >> "${GITHUB_OUTPUT}"
+            if [ -n "${previous_digest}" ]; then
+              echo "upstream digest changed: ${previous_digest} -> ${{ steps.image.outputs.image_digest }}"
+            else
+              echo "no previous runtime release digest found; export required"
+            fi
+          fi
+
       - name: Export runtime bundle
+        if: ${{ steps.check.outputs.should_export == 'true' }}
         id: export
         env:
           APP_ROOT: ${{ steps.settings.outputs.app_root }}
           INCLUDE_PATHS: ${{ steps.settings.outputs.include_paths }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.image_digest }}
           BUNDLE_STAMP: ${{ steps.vars.outputs.bundle_stamp }}
           BUNDLE_PATH_FILE: ${{ runner.temp }}/runtime-bundle-path.txt
         run: |
@@ -106,6 +151,7 @@ jobs:
           echo "runtime_bundle=${runtime_bundle}" >> "${GITHUB_OUTPUT}"
 
       - name: Prepare stable release asset names
+        if: ${{ steps.check.outputs.should_export == 'true' }}
         id: aliases
         run: |
           set -eu
@@ -114,6 +160,7 @@ jobs:
           echo "runtime_bundle_latest=${runtime_bundle_latest}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload workflow artifact
+        if: ${{ steps.check.outputs.should_export == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: remnanode-bundles-${{ steps.vars.outputs.bundle_stamp }}
@@ -123,19 +170,21 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release
-        if: ${{ steps.settings.outputs.publish_release == 'true' }}
+        if: ${{ steps.check.outputs.should_export == 'true' && steps.settings.outputs.publish_release == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
+          release_notes="Runtime bundle exported from ${{ steps.settings.outputs.image_ref }}
+          image_digest=${{ steps.image.outputs.image_digest }}"
           gh release create "${{ steps.vars.outputs.release_tag }}" \
             "${{ steps.export.outputs.runtime_bundle }}" \
             "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
             --title "${{ steps.vars.outputs.release_tag }}" \
-            --notes "Runtime bundle exported from ${{ steps.settings.outputs.image_ref }}"
+            --notes "${release_notes}"
 
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_host }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_host && needs.bundle.outputs.should_export == 'true' }}
     needs: bundle
     runs-on: ubuntu-latest
     steps:

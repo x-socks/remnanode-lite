@@ -3,6 +3,7 @@
 Bare-metal deployment scaffold for running Remnanode on extremely constrained Alpine LXC VPS instances.
 
 GitHub Releases publish only the upstream Remnanode runtime bundle. Host bootstrap files are written directly by the installer script on the target machine.
+The GitHub Actions workflow now checks upstream `remnawave/node:latest` once per day and only publishes a new runtime release when the upstream image digest changes.
 
 Quick install:
 

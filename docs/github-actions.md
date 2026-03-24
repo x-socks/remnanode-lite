@@ -12,7 +12,8 @@ The workflow is in [.github/workflows/runtime-bundle.yml](../.github/workflows/r
 
 Current trigger model:
 
-- every push to `main` automatically exports the upstream runtime and publishes a fresh GitHub release
+- a scheduled run checks `remnawave/node:latest` every day
+- if the upstream image digest changed, the workflow exports and publishes a fresh runtime release
 - `workflow_dispatch` remains available for manual runs with custom image parameters and optional remote deploy
 
 If you want the workflow to create GitHub releases, the workflow token must have release write access. This repository workflow requests:
@@ -29,6 +30,7 @@ When `publish_release=true`, each release contains only runtime assets:
 - `remnanode-runtime-latest.tar.gz`
 
 The stable name is intended for pull-based updates on the Alpine host.
+The release notes also record the upstream `image_digest=sha256:...` value used for change detection.
 
 The current pull-based scripts assume the repository release assets are publicly downloadable.
 

@@ -14,6 +14,7 @@ INCLUDE_PATHS="${INCLUDE_PATHS:-dist node_modules package.json package-lock.json
 BUNDLE_STAMP="${BUNDLE_STAMP:-}"
 BUNDLE_NAME="${BUNDLE_NAME:-}"
 BUNDLE_PATH_FILE="${BUNDLE_PATH_FILE:-}"
+IMAGE_DIGEST="${IMAGE_DIGEST:-}"
 
 require_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -101,6 +102,7 @@ fi
 
 cat > "${STAGE_DIR}/manifest.txt" <<EOF
 image=${IMAGE_REF}
+image_digest=${IMAGE_DIGEST}
 app_root=${APP_ROOT}
 created_at=${STAMP}
 include_paths=${INCLUDE_PATHS}

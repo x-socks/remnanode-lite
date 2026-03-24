@@ -58,6 +58,8 @@ If you publish GitHub releases from Actions, the host can also consume these sta
 
 - `remnanode-runtime-latest.tar.gz`
 
+The scheduled GitHub Actions workflow checks the upstream image digest once per day and only republishes this asset when the official runtime changed.
+
 ## 3. Install or Update Runtime On the Target Host
 
 On the Alpine host:
