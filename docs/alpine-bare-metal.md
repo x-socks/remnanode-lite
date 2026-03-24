@@ -62,6 +62,9 @@ That installs:
 - `/usr/local/bin/remnanode-preflight`
 - `/usr/local/bin/check-remnanode-layout`
 - `/usr/local/bin/remnanode-update-from-github`
+- `/usr/local/bin/remnanode-one-click-deploy`
+- `/usr/local/bin/remnanode-one-click-upgrade`
+- `/usr/local/bin/remnanode-panel`
 - `/etc/init.d/remnanode`
 - `/etc/init.d/xray`
 - `/etc/conf.d/remnanode`
@@ -78,16 +81,21 @@ If you want to stage into another root filesystem, use:
 ./scripts/install-layout.sh /my/chroot
 ```
 
-For an interactive first-time install directly from GitHub Releases on Alpine:
+For a unified install or update entrypoint directly from GitHub:
 
 ```sh
 apk add --no-cache curl && \
-curl -fsSL -o /root/one-click-deploy.sh \
-  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh && \
-sh /root/one-click-deploy.sh
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh
 ```
 
-The script prompts for:
+The panel script lets you choose:
+
+- `install`
+- `update`
+
+The install path prompts for:
 
 - `NODE_PORT`
 - `SECRET_KEY`

@@ -124,12 +124,18 @@ If you prefer an interactive host-side installer, use:
 
 ```sh
 apk add --no-cache curl && \
-curl -fsSL -o /root/one-click-deploy.sh \
-  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-deploy.sh && \
-sh /root/one-click-deploy.sh
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh
 ```
 
-That script:
+That panel script:
+
+- lets you choose `install` or `update`
+- defaults to `install` on a fresh host
+- defaults to `update` on an already-bootstrapped host
+
+The install path:
 
 - installs `nodejs`, `gcompat`, `unzip`, and `supervisor` on Alpine
 - installs the latest Xray release for the current CPU architecture
@@ -139,6 +145,13 @@ That script:
 - writes the OpenRC and supervisord files directly on the host
 - writes `/etc/remnanode/remnanode.env`
 - installs and starts the `remnanode` OpenRC service
+
+The update path:
+
+- downloads the latest runtime bundle from GitHub Releases
+- installs it into a new release directory
+- repoints `/opt/remnanode/current`
+- restarts `remnanode`
 
 ## Limitation
 

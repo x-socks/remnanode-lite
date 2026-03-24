@@ -72,12 +72,12 @@ For a first-time host bootstrap directly from the repository:
 
 ```sh
 apk add --no-cache curl && \
-curl -fsSL -o /root/one-click-deploy.sh \
-  https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-deploy.sh && \
-sh /root/one-click-deploy.sh
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh
 ```
 
-That installer writes the OpenRC and supervisord files directly on the host, then downloads only the runtime bundle from the latest GitHub release.
+That panel script can drive both first install and later updates. The install path writes the OpenRC and supervisord files directly on the host, then downloads only the runtime bundle from the latest GitHub release.
 
 This installs into a release directory and repoints:
 
