@@ -96,7 +96,7 @@ normalize_secret_key() {
 
 ensure_apk_prereqs() {
     if command -v apk >/dev/null 2>&1; then
-        apk add --upgrade curl tar nodejs gcompat unzip supervisor
+        apk add --no-cache --upgrade curl tar nodejs gcompat unzip supervisor
     fi
 }
 
@@ -180,24 +180,22 @@ update_key_value_file() {
 
     printf '%s=%s\n' "${key_name}" "${quoted_value}" >> "${temp_file}"
     mv "${temp_file}" "${file_path}"
-
-    if id remnanode >/dev/null 2>&1; then
-        chown root:remnanode "${file_path}" 2>/dev/null || true
-    fi
-
-    chmod 640 "${file_path}" 2>/dev/null || true
+    chown root:root "${file_path}" 2>/dev/null || true
+    chmod 600 "${file_path}" 2>/dev/null || true
 }
 
-ensure_service_user() {
-    if ! grep -q '^remnanode:' /etc/group 2>/dev/null; then
-        addgroup -S remnanode
-    fi
-
-    if ! id remnanode >/dev/null 2>&1; then
-        adduser -S -D -H -h /nonexistent -s /sbin/nologin -G remnanode remnanode
-    fi
-
-    printf '%s\n' "Ensured service user remnanode:remnanode"
+ensure_layout() {
+    mkdir -p /etc/remnanode
+    mkdir -p /etc/xray
+    mkdir -p /usr/local/bin
+    mkdir -p /usr/local/share/xray
+    mkdir -p /var/log/remnanode
+    mkdir -p /var/log/supervisor
+    mkdir -p /etc/conf.d
+    mkdir -p /etc/init.d
+    mkdir -p "${BASE_DIR}/releases"
+    chmod 700 /etc/remnanode 2>/dev/null || true
+    printf '%s\n' "Installed deployment layout into /"
 }
 
 install_remnanode_service() {
@@ -267,8 +265,6 @@ REMNANODE_ENV=production
 
 # Required panel values.
 NODE_PORT=20481
-
-# Paste the panel-provided secret payload here.
 SECRET_KEY=
 
 # Internal Xray API port used by the node process to control rw-core.
@@ -299,40 +295,17 @@ REMNANODE_ULIMIT_NOFILE=65535
 EOF
     fi
 
-    if [ ! -f /etc/remnanode/xray.env ]; then
-        cat > /etc/remnanode/xray.env <<'EOF'
-# Optional standalone Xray service.
-# Do not enable this if Remnanode already manages Xray itself.
-
-XRAY_BIN=/usr/local/bin/xray
-XRAY_CONFIG=/etc/xray/config.json
-XRAY_ASSET_DIR=/usr/local/share/xray
-XRAY_ULIMIT_NOFILE=65535
-GOMAXPROCS=1
-GODEBUG=madvdontneed=1
-EOF
-    fi
-
     if [ ! -f /etc/remnanode/github-release.env ]; then
         cat > /etc/remnanode/github-release.env <<'EOF'
 # Pull-based updates from the latest GitHub release.
-# This path is intended for public repositories using stable asset names.
-
 REPO_SLUG=owner/repo
 RUNTIME_ASSET_NAME=remnanode-runtime-latest.tar.gz
 BASE_DIR=/opt/remnanode
-RESTART_SERVICE=0
 EOF
     fi
 
-    chown root:remnanode /etc/remnanode 2>/dev/null || true
-    chmod 750 /etc/remnanode 2>/dev/null || true
-
-    for env_file in /etc/remnanode/remnanode.env /etc/remnanode/xray.env /etc/remnanode/github-release.env
-    do
-        chown root:remnanode "${env_file}" 2>/dev/null || true
-        chmod 640 "${env_file}" 2>/dev/null || true
-    done
+    chmod 600 /etc/remnanode/remnanode.env /etc/remnanode/github-release.env 2>/dev/null || true
+    chown root:root /etc/remnanode/remnanode.env /etc/remnanode/github-release.env 2>/dev/null || true
 }
 
 install_xray_example_config() {
@@ -372,317 +345,6 @@ EOF
     fi
 
     chmod 644 /etc/xray/config.json.example
-}
-
-run_preflight() {
-    STATUS=0
-
-    ok() {
-        printf 'ok   %s\n' "$1"
-    }
-
-    warn() {
-        printf 'warn %s\n' "$1"
-    }
-
-    fail() {
-        printf 'fail %s\n' "$1" >&2
-        STATUS=1
-    }
-
-    has_cmd() {
-        command -v "$1" >/dev/null 2>&1
-    }
-
-    check_cmd() {
-        if has_cmd "$1"; then
-            ok "command $1"
-        else
-            fail "missing command $1"
-        fi
-    }
-
-    check_file() {
-        if [ -e "$1" ]; then
-            ok "path $1"
-        else
-            fail "missing path $1"
-        fi
-    }
-
-    if [ -f /etc/alpine-release ]; then
-        ok "alpine $(cat /etc/alpine-release)"
-    else
-        warn "host is not reporting Alpine via /etc/alpine-release"
-    fi
-
-    if [ -r /proc/meminfo ]; then
-        mem_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
-        if [ -n "${mem_kb}" ]; then
-            ok "memtotal ${mem_kb} kB"
-            if [ "${mem_kb}" -gt 300000 ]; then
-                warn "memory is above the ultra-low-memory target; tuning remains conservative"
-            fi
-        else
-            warn "unable to parse /proc/meminfo"
-        fi
-    else
-        warn "cannot read /proc/meminfo"
-    fi
-
-    if [ -r /proc/swaps ]; then
-        swap_lines="$(awk 'NR>1 {count++} END {print count+0}' /proc/swaps)"
-        if [ "${swap_lines}" -eq 0 ]; then
-            ok "no swap configured"
-        else
-            warn "swap entries detected in /proc/swaps"
-        fi
-    else
-        warn "cannot read /proc/swaps"
-    fi
-
-    check_cmd rc-service
-    check_cmd rc-update
-    check_file /sbin/openrc-run
-
-    if has_cmd node; then
-        version="$(node -v 2>/dev/null || true)"
-        ok "node ${version}"
-        major="$(printf '%s' "${version}" | sed 's/^v//' | cut -d. -f1)"
-        case "${major}" in
-            ''|*[!0-9]*)
-                warn "unable to parse Node.js major version"
-                ;;
-            *)
-                if [ "${major}" -lt 24 ]; then
-                    warn "Node.js major version is below 24"
-                fi
-                ;;
-        esac
-    else
-        fail "missing command node"
-    fi
-
-    if has_cmd xray; then
-        ok "command xray"
-    elif [ -x /usr/local/bin/xray ]; then
-        ok "path /usr/local/bin/xray"
-    else
-        fail "missing xray binary"
-    fi
-
-    if [ -x /usr/local/bin/rw-core ]; then
-        ok "path /usr/local/bin/rw-core"
-    else
-        warn "missing /usr/local/bin/rw-core symlink"
-    fi
-
-    if has_cmd supervisord; then
-        ok "command supervisord"
-    else
-        warn "missing command supervisord"
-    fi
-
-    if command -v apk >/dev/null 2>&1; then
-        if apk info -e gcompat >/dev/null 2>&1; then
-            ok "apk package gcompat"
-        else
-            warn "apk package gcompat not installed"
-        fi
-    else
-        warn "apk not available; cannot check gcompat package"
-    fi
-
-    nofile="$(ulimit -n 2>/dev/null || true)"
-    if [ -n "${nofile}" ]; then
-        ok "current nofile ${nofile}"
-        if [ "${nofile}" -lt 65535 ] 2>/dev/null; then
-            warn "current shell nofile is below 65535"
-        fi
-    else
-        warn "unable to read current nofile limit"
-    fi
-
-    return "${STATUS}"
-}
-
-install_preflight_tool() {
-    cat > /usr/local/bin/remnanode-preflight <<'EOF'
-#!/bin/sh
-
-set -eu
-
-STATUS=0
-
-ok() {
-    printf 'ok   %s\n' "$1"
-}
-
-warn() {
-    printf 'warn %s\n' "$1"
-}
-
-fail() {
-    printf 'fail %s\n' "$1" >&2
-    STATUS=1
-}
-
-has_cmd() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-check_cmd() {
-    if has_cmd "$1"; then
-        ok "command $1"
-    else
-        fail "missing command $1"
-    fi
-}
-
-check_file() {
-    if [ -e "$1" ]; then
-        ok "path $1"
-    else
-        fail "missing path $1"
-    fi
-}
-
-if [ -f /etc/alpine-release ]; then
-    ok "alpine $(cat /etc/alpine-release)"
-else
-    warn "host is not reporting Alpine via /etc/alpine-release"
-fi
-
-if [ -r /proc/meminfo ]; then
-    mem_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
-    if [ -n "${mem_kb}" ]; then
-        ok "memtotal ${mem_kb} kB"
-        if [ "${mem_kb}" -gt 300000 ]; then
-            warn "memory is above the ultra-low-memory target; tuning remains conservative"
-        fi
-    else
-        warn "unable to parse /proc/meminfo"
-    fi
-else
-    warn "cannot read /proc/meminfo"
-fi
-
-if [ -r /proc/swaps ]; then
-    swap_lines="$(awk 'NR>1 {count++} END {print count+0}' /proc/swaps)"
-    if [ "${swap_lines}" -eq 0 ]; then
-        ok "no swap configured"
-    else
-        warn "swap entries detected in /proc/swaps"
-    fi
-else
-    warn "cannot read /proc/swaps"
-fi
-
-check_cmd rc-service
-check_cmd rc-update
-check_file /sbin/openrc-run
-
-if has_cmd node; then
-    version="$(node -v 2>/dev/null || true)"
-    ok "node ${version}"
-    major="$(printf '%s' "${version}" | sed 's/^v//' | cut -d. -f1)"
-    case "${major}" in
-        ''|*[!0-9]*)
-            warn "unable to parse Node.js major version"
-            ;;
-        *)
-            if [ "${major}" -lt 24 ]; then
-                warn "Node.js major version is below 24"
-            fi
-            ;;
-    esac
-else
-    fail "missing command node"
-fi
-
-if has_cmd xray; then
-    ok "command xray"
-elif [ -x /usr/local/bin/xray ]; then
-    ok "path /usr/local/bin/xray"
-else
-    fail "missing xray binary"
-fi
-
-if [ -x /usr/local/bin/rw-core ]; then
-    ok "path /usr/local/bin/rw-core"
-else
-    warn "missing /usr/local/bin/rw-core symlink"
-fi
-
-if has_cmd supervisord; then
-    ok "command supervisord"
-else
-    warn "missing command supervisord"
-fi
-
-if command -v apk >/dev/null 2>&1; then
-    if apk info -e gcompat >/dev/null 2>&1; then
-        ok "apk package gcompat"
-    else
-        warn "apk package gcompat not installed"
-    fi
-else
-    warn "apk not available; cannot check gcompat package"
-fi
-
-nofile="$(ulimit -n 2>/dev/null || true)"
-if [ -n "${nofile}" ]; then
-    ok "current nofile ${nofile}"
-    if [ "${nofile}" -lt 65535 ] 2>/dev/null; then
-        warn "current shell nofile is below 65535"
-    fi
-else
-    warn "unable to read current nofile limit"
-fi
-
-exit "${STATUS}"
-EOF
-    chmod 755 /usr/local/bin/remnanode-preflight
-}
-
-install_check_layout_tool() {
-    cat > /usr/local/bin/check-remnanode-layout <<'EOF'
-#!/bin/sh
-
-set -eu
-
-APP_DIR="${1:-/opt/remnanode/current}"
-STATUS=0
-
-check_path() {
-    path="$1"
-    label="$2"
-
-    if [ -e "${path}" ]; then
-        printf 'ok   %s %s\n' "${label}" "${path}"
-    else
-        printf 'miss %s %s\n' "${label}" "${path}" >&2
-        STATUS=1
-    fi
-}
-
-check_path "${APP_DIR}" dir
-check_path "${APP_DIR}/dist" dir
-check_path "${APP_DIR}/node_modules" dir
-check_path "${APP_DIR}/package.json" file
-
-if [ -f "${APP_DIR}/dist/src/main.js" ]; then
-    printf 'ok   file %s\n' "${APP_DIR}/dist/src/main.js"
-elif [ -f "${APP_DIR}/dist/src/main" ]; then
-    printf 'ok   file %s\n' "${APP_DIR}/dist/src/main"
-else
-    printf 'miss file %s\n' "${APP_DIR}/dist/src/main(.js)" >&2
-    STATUS=1
-fi
-
-exit "${STATUS}"
-EOF
-    chmod 755 /usr/local/bin/check-remnanode-layout
 }
 
 install_supervisord_config() {
@@ -823,185 +485,185 @@ EOF
     chmod 755 /usr/local/bin/remnanode-start
 }
 
-install_runtime_bundle_tool() {
-    cat > /usr/local/bin/install-remnanode-runtime <<'EOF'
-#!/bin/sh
+install_runtime_bundle() {
+    bundle_path="$1"
+    releases_dir="${BASE_DIR}/releases"
+    current_link="${BASE_DIR}/current"
 
-set -eu
-
-if [ "$#" -lt 1 ]; then
-    echo "usage: $0 <runtime-bundle.tar.gz> [base-dir]" >&2
-    exit 1
-fi
-
-BUNDLE_PATH="$1"
-BASE_DIR="${2:-/opt/remnanode}"
-RELEASES_DIR="${BASE_DIR}/releases"
-CURRENT_LINK="${BASE_DIR}/current"
-
-require_cmd() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        echo "missing command: $1" >&2
+    if [ ! -f "${bundle_path}" ]; then
+        echo "bundle not found: ${bundle_path}" >&2
         exit 1
     fi
-}
 
-require_cmd tar
-require_cmd date
-require_cmd ln
-require_cmd cp
-require_cmd mv
+    install_dir="${WORK_DIR}/install-runtime"
+    rm -rf "${install_dir}"
+    mkdir -p "${install_dir}" "${releases_dir}"
 
-if [ ! -f "${BUNDLE_PATH}" ]; then
-    echo "bundle not found: ${BUNDLE_PATH}" >&2
-    exit 1
-fi
+    tar -C "${install_dir}" -xzf "${bundle_path}"
 
-mkdir -p "${RELEASES_DIR}"
-
-WORK_ROOT="${HOME:-/root}/.remnanode-work"
-WORK_DIR="${WORK_ROOT}/install-runtime.$$"
-mkdir -p "${WORK_ROOT}"
-rm -rf "${WORK_DIR}"
-mkdir -p "${WORK_DIR}"
-
-cleanup() {
-    rm -rf "${WORK_DIR}"
-}
-
-trap cleanup EXIT INT TERM
-
-tar -C "${WORK_DIR}" -xzf "${BUNDLE_PATH}"
-
-if [ ! -d "${WORK_DIR}/runtime" ]; then
-    echo "bundle missing runtime directory" >&2
-    exit 1
-fi
-
-STAMP="$(date +%Y%m%d-%H%M%S)-$$"
-RELEASE_DIR="${RELEASES_DIR}/${STAMP}"
-
-mv "${WORK_DIR}/runtime" "${RELEASE_DIR}"
-
-if [ -f "${WORK_DIR}/manifest.txt" ]; then
-    cp "${WORK_DIR}/manifest.txt" "${RELEASE_DIR}/.bundle-manifest"
-fi
-
-ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
-
-printf '%s\n' "installed release ${RELEASE_DIR}"
-printf '%s\n' "updated current -> ${RELEASE_DIR}"
-EOF
-    chmod 755 /usr/local/bin/install-remnanode-runtime
-}
-
-install_update_from_github_tool() {
-    cat > /usr/local/bin/remnanode-update-from-github <<'EOF'
-#!/bin/sh
-
-set -eu
-
-ENV_FILE="${GITHUB_RELEASE_ENV_FILE:-/etc/remnanode/github-release.env}"
-
-if [ -f "${ENV_FILE}" ]; then
-    set -a
-    . "${ENV_FILE}"
-    set +a
-fi
-
-REPO_SLUG="${REPO_SLUG:-}"
-RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-remnanode-runtime-latest.tar.gz}"
-BASE_DIR="${BASE_DIR:-/opt/remnanode}"
-RESTART_SERVICE="${RESTART_SERVICE:-0}"
-
-require_cmd() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        echo "missing command: $1" >&2
+    if [ ! -d "${install_dir}/runtime" ]; then
+        echo "bundle missing runtime directory" >&2
         exit 1
     fi
-}
 
-download_file() {
-    url="$1"
-    out="$2"
+    stamp="$(date +%Y%m%d-%H%M%S)-$$"
+    release_dir="${releases_dir}/${stamp}"
+    mv "${install_dir}/runtime" "${release_dir}"
 
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "${url}" -o "${out}"
-        return 0
+    if [ -f "${install_dir}/manifest.txt" ]; then
+        cp "${install_dir}/manifest.txt" "${release_dir}/.bundle-manifest"
     fi
 
-    if command -v wget >/dev/null 2>&1; then
-        wget -qO "${out}" "${url}"
-        return 0
+    ln -sfn "${release_dir}" "${current_link}"
+
+    printf '%s\n' "installed release ${release_dir}"
+    printf '%s\n' "updated current -> ${release_dir}"
+}
+
+check_layout() {
+    app_dir="${BASE_DIR}/current"
+    status=0
+
+    check_path() {
+        path="$1"
+        label="$2"
+
+        if [ -e "${path}" ]; then
+            printf 'ok   %s %s\n' "${label}" "${path}"
+        else
+            printf 'miss %s %s\n' "${label}" "${path}" >&2
+            status=1
+        fi
+    }
+
+    check_path "${app_dir}" dir
+    check_path "${app_dir}/dist" dir
+    check_path "${app_dir}/node_modules" dir
+    check_path "${app_dir}/package.json" file
+
+    if [ -f "${app_dir}/dist/src/main.js" ]; then
+        printf 'ok   file %s\n' "${app_dir}/dist/src/main.js"
+    elif [ -f "${app_dir}/dist/src/main" ]; then
+        printf 'ok   file %s\n' "${app_dir}/dist/src/main"
+    else
+        printf 'miss file %s\n' "${app_dir}/dist/src/main(.js)" >&2
+        status=1
     fi
 
-    echo "missing curl or wget" >&2
-    exit 1
+    return "${status}"
 }
 
-if [ -z "${REPO_SLUG}" ]; then
-    echo "REPO_SLUG is required" >&2
-    exit 1
-fi
+run_preflight() {
+    status=0
 
-require_cmd tar
-require_cmd sh
-require_cmd /usr/local/bin/install-remnanode-runtime
-require_cmd /usr/local/bin/check-remnanode-layout
+    ok() {
+        printf 'ok   %s\n' "$1"
+    }
 
-WORK_ROOT="${HOME:-/root}/.remnanode-work"
-WORK_DIR="${WORK_ROOT}/update-release.$$"
-mkdir -p "${WORK_ROOT}"
-rm -rf "${WORK_DIR}"
-mkdir -p "${WORK_DIR}"
+    warn() {
+        printf 'warn %s\n' "$1"
+    }
 
-cleanup() {
-    rm -rf "${WORK_DIR}"
-}
+    fail() {
+        printf 'fail %s\n' "$1" >&2
+        status=1
+    }
 
-trap cleanup EXIT INT TERM
+    has_cmd() {
+        command -v "$1" >/dev/null 2>&1
+    }
 
-runtime_url="https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_ASSET_NAME}"
-runtime_bundle="${WORK_DIR}/${RUNTIME_ASSET_NAME}"
+    check_cmd() {
+        if has_cmd "$1"; then
+            ok "command $1"
+        else
+            fail "missing command $1"
+        fi
+    }
 
-download_file "${runtime_url}" "${runtime_bundle}"
+    check_file() {
+        if [ -e "$1" ]; then
+            ok "path $1"
+        else
+            fail "missing path $1"
+        fi
+    }
 
-/usr/local/bin/install-remnanode-runtime "${runtime_bundle}" "${BASE_DIR}"
-/usr/local/bin/check-remnanode-layout "${BASE_DIR}/current"
+    if [ -f /etc/alpine-release ]; then
+        ok "alpine $(cat /etc/alpine-release)"
+    else
+        warn "host is not reporting Alpine via /etc/alpine-release"
+    fi
 
-if [ "${RESTART_SERVICE}" = "1" ]; then
-    rc-service remnanode restart
-fi
+    if [ -r /proc/meminfo ]; then
+        mem_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
+        if [ -n "${mem_kb}" ]; then
+            ok "memtotal ${mem_kb} kB"
+        else
+            warn "unable to parse /proc/meminfo"
+        fi
+    else
+        warn "cannot read /proc/meminfo"
+    fi
 
-printf '%s\n' "updated from https://github.com/${REPO_SLUG}/releases/latest"
-EOF
-    chmod 755 /usr/local/bin/remnanode-update-from-github
-}
+    if [ -r /proc/swaps ]; then
+        swap_lines="$(awk 'NR>1 {count++} END {print count+0}' /proc/swaps)"
+        if [ "${swap_lines}" -eq 0 ]; then
+            ok "no swap configured"
+        else
+            warn "swap entries detected in /proc/swaps"
+        fi
+    else
+        warn "cannot read /proc/swaps"
+    fi
 
-ensure_layout() {
-    mkdir -p /etc/remnanode
-    mkdir -p /etc/xray
-    mkdir -p /usr/local/bin
-    mkdir -p /usr/local/share/xray
-    mkdir -p /var/log/remnanode
-    mkdir -p /var/log/xray
-    mkdir -p /var/log/supervisor
-    mkdir -p /etc/conf.d
-    mkdir -p /etc/init.d
-    mkdir -p "${BASE_DIR}/releases"
-    printf '%s\n' "Installed deployment layout into /"
+    check_cmd rc-service
+    check_cmd rc-update
+    check_file /sbin/openrc-run
+
+    if has_cmd node; then
+        ok "node $(node -v 2>/dev/null || true)"
+    else
+        fail "missing command node"
+    fi
+
+    if has_cmd xray; then
+        ok "command xray"
+    elif [ -x /usr/local/bin/xray ]; then
+        ok "path /usr/local/bin/xray"
+    else
+        fail "missing xray binary"
+    fi
+
+    if [ -x /usr/local/bin/rw-core ]; then
+        ok "path /usr/local/bin/rw-core"
+    else
+        warn "missing /usr/local/bin/rw-core"
+    fi
+
+    if has_cmd supervisord; then
+        ok "command supervisord"
+    else
+        fail "missing command supervisord"
+    fi
+
+    if command -v apk >/dev/null 2>&1; then
+        if apk info -e gcompat >/dev/null 2>&1; then
+            ok "apk package gcompat"
+        else
+            warn "apk package gcompat not installed"
+        fi
+    fi
+
+    nofile="$(ulimit -n 2>/dev/null || true)"
+    if [ -n "${nofile}" ]; then
+        ok "current nofile ${nofile}"
+    fi
+
+    return "${status}"
 }
 
 require_root
-ensure_apk_prereqs
-require_cmd tar
-require_cmd unzip
-require_cmd install
-require_cmd node
-require_cmd supervisord
-require_cmd rc-service
-require_cmd rc-update
-require_node_24
 
 WORK_ROOT="${HOME:-/root}/.remnanode-work"
 WORK_DIR="${WORK_ROOT}/one-click.$$"
@@ -1015,9 +677,18 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+ensure_apk_prereqs
+require_cmd tar
+require_cmd unzip
+require_cmd install
+require_cmd node
+require_cmd supervisord
+require_cmd rc-service
+require_cmd rc-update
+require_node_24
 install_xray
-print_intro
 
+print_intro
 NODE_PORT="$(prompt_required 'NODE_PORT (Node Port from panel): ' "${NODE_PORT}")"
 SECRET_INPUT="$(prompt_required 'SECRET_KEY value or full line from panel: ' "${SECRET_INPUT}")"
 SECRET_KEY="$(normalize_secret_key "${SECRET_INPUT}")"
@@ -1030,29 +701,26 @@ case "${NODE_PORT}" in
 esac
 
 run_preflight
-ensure_service_user
 ensure_layout
-install_preflight_tool
-install_check_layout_tool
-install_runtime_bundle_tool
-install_update_from_github_tool
 install_remnanode_service
 install_remnanode_env
 install_xray_example_config
 install_supervisord_config
 install_remnanode_start
 
-download_file "https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_ASSET_NAME}" "${WORK_DIR}/${RUNTIME_ASSET_NAME}"
-/usr/local/bin/install-remnanode-runtime "${WORK_DIR}/${RUNTIME_ASSET_NAME}" "${BASE_DIR}"
-/usr/local/bin/check-remnanode-layout "${BASE_DIR}/current"
+runtime_url="https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_ASSET_NAME}"
+runtime_bundle="${WORK_DIR}/${RUNTIME_ASSET_NAME}"
+download_file "${runtime_url}" "${runtime_bundle}"
+install_runtime_bundle "${runtime_bundle}"
+check_layout
 
 update_key_value_file /etc/remnanode/remnanode.env NODE_PORT "${NODE_PORT}"
 update_key_value_file /etc/remnanode/remnanode.env SECRET_KEY "${SECRET_KEY}"
 update_key_value_file /etc/remnanode/remnanode.env XTLS_API_PORT 61000
-update_key_value_file /etc/remnanode/remnanode.env NODE_OPTIONS "--max-http-header-size=65536 --max-old-space-size=64 --max-semi-space-size=1"
 update_key_value_file /etc/remnanode/remnanode.env XRAY_BIN /usr/local/bin/xray
 update_key_value_file /etc/remnanode/remnanode.env XRAY_CONFIG /etc/xray/config.json
 update_key_value_file /etc/remnanode/remnanode.env XRAY_ASSET_DIR /usr/local/share/xray
+update_key_value_file /etc/remnanode/remnanode.env NODE_OPTIONS "--max-http-header-size=65536 --max-old-space-size=64 --max-semi-space-size=1"
 update_key_value_file /etc/remnanode/github-release.env REPO_SLUG "${REPO_SLUG}"
 update_key_value_file /etc/remnanode/github-release.env RUNTIME_ASSET_NAME "${RUNTIME_ASSET_NAME}"
 update_key_value_file /etc/remnanode/github-release.env BASE_DIR "${BASE_DIR}"
@@ -1072,6 +740,7 @@ else
 fi
 
 sleep 3
+printf '%s\n' "===== service status ====="
 rc-service remnanode status || true
 printf '%s\n' "===== /etc/remnanode/remnanode.env ====="
 cat /etc/remnanode/remnanode.env

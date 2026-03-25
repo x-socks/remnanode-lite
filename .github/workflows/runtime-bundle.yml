@@ -28,21 +28,6 @@ on:
         required: true
         default: true
         type: boolean
-      deploy_host:
-        description: Copy the runtime bundle to an already-bootstrapped Alpine host
-        required: true
-        default: false
-        type: boolean
-      base_dir:
-        description: Remote installation base directory
-        required: true
-        default: /opt/remnanode
-        type: string
-      restart_service:
-        description: Restart remnanode after remote install
-        required: true
-        default: false
-        type: boolean
 
 jobs:
   bundle:
@@ -117,8 +102,9 @@ jobs:
         run: |
           set -eu
           latest_body=""
-          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" >/tmp/remnanode-latest-release.json 2>/dev/null; then
-            latest_body=$(python3 -c "import json; print(json.load(open('/tmp/remnanode-latest-release.json', 'r', encoding='utf-8')).get('body', ''))")
+          latest_release_json="${RUNNER_TEMP}/latest-release.json"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2>/dev/null; then
+            latest_body=$(python3 -c "import json; print(json.load(open('${latest_release_json}', 'r', encoding='utf-8')).get('body', ''))")
           fi
 
           previous_digest=$(printf '%s\n' "${latest_body}" | sed -n 's/^image_digest=//p' | head -n 1)
@@ -150,7 +136,7 @@ jobs:
           runtime_bundle=$(cat "${RUNNER_TEMP}/runtime-bundle-path.txt")
           echo "runtime_bundle=${runtime_bundle}" >> "${GITHUB_OUTPUT}"
 
-      - name: Prepare stable release asset names
+      - name: Prepare stable release asset name
         if: ${{ steps.check.outputs.should_export == 'true' }}
         id: aliases
         run: |
@@ -182,73 +168,3 @@ jobs:
             "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
             --title "${{ steps.vars.outputs.release_tag }}" \
             --notes "${release_notes}"
-
-  deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_host && needs.bundle.outputs.should_export == 'true' }}
-    needs: bundle
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: remnanode-bundles-${{ needs.bundle.outputs.bundle_stamp }}
-          path: ./artifacts
-
-      - name: Configure SSH
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          set -eu
-          : "${DEPLOY_HOST:?missing DEPLOY_HOST secret}"
-          : "${DEPLOY_USER:?missing DEPLOY_USER secret}"
-          : "${DEPLOY_SSH_KEY:?missing DEPLOY_SSH_KEY secret}"
-          mkdir -p "${HOME}/.ssh"
-          chmod 700 "${HOME}/.ssh"
-          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${HOME}/.ssh/id_ed25519"
-          chmod 600 "${HOME}/.ssh/id_ed25519"
-          if [ -n "${DEPLOY_KNOWN_HOSTS}" ]; then
-            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
-          else
-            port="${DEPLOY_PORT:-22}"
-            ssh-keyscan -p "${port}" "${DEPLOY_HOST}" > "${HOME}/.ssh/known_hosts"
-          fi
-
-      - name: Copy bundles to remote host
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        run: |
-          set -eu
-          port="${DEPLOY_PORT:-22}"
-          remote_dir="/root/.remnanode-work/ci-${{ needs.bundle.outputs.bundle_stamp }}"
-          ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${remote_dir}'"
-          scp -P "${port}" ./artifacts/* "${DEPLOY_USER}@${DEPLOY_HOST}:${remote_dir}/"
-
-      - name: Update remote host runtime
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        run: |
-          set -eu
-          port="${DEPLOY_PORT:-22}"
-          remote_dir="/root/.remnanode-work/ci-${{ needs.bundle.outputs.bundle_stamp }}"
-          ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "
-            set -eu
-            cd '${remote_dir}'
-            runtime_bundle=\$(find . -maxdepth 1 -name 'remnanode-runtime-*.tar.gz' | head -n 1)
-            [ -n \"\${runtime_bundle}\" ]
-            if [ ! -x /usr/local/bin/install-remnanode-runtime ]; then
-              echo 'remote host is not bootstrapped; run the one-click installer first' >&2
-              exit 1
-            fi
-            /usr/local/bin/install-remnanode-runtime \"${remote_dir}/\${runtime_bundle#./}\" '${{ inputs.base_dir }}'
-            /usr/local/bin/check-remnanode-layout '${{ inputs.base_dir }}/current'
-            if [ '${{ inputs.restart_service }}' = 'true' ]; then
-              rc-service remnanode restart
-            fi
-          "

@@ -1,23 +1,25 @@
 # Runtime Bundle Workflow
 
-This workflow is for the real bottleneck in 256 MB Alpine guests: never build on the target host.
+The target VPS should never build Remnanode locally.
 
-## 1. Export Runtime From the Official Image
+This repository uses two paths:
 
-Run this on a separate machine that already has the upstream image available locally:
+1. Export and publish runtime bundles on a separate machine or in GitHub Actions.
+2. Pull and install those bundles from the Alpine VPS.
+
+## Manual Export
+
+Run on a machine with Docker:
 
 ```sh
 ./scripts/export-runtime-bundle.sh remnawave/node:latest
 ```
 
-What the script does:
+Default output:
 
-- creates a stopped container from the image
-- detects a likely Node app root inside the container
-- copies only runtime artifacts out of the image
-- writes a compressed tarball under `./out/`
+- `./out/remnanode-runtime-<stamp>.tar.gz`
 
-Default included paths:
+Default exported paths:
 
 - `dist`
 - `node_modules`
@@ -31,110 +33,77 @@ Default included paths:
 - `ecosystem.config.js`
 - `.env.example`
 
-The defaults are intentionally broader than the minimum so the extracted runtime is less likely to miss a required asset.
-
-If the official image uses a non-standard app root, set it explicitly:
+Optional overrides:
 
 ```sh
 APP_ROOT=/usr/src/app ./scripts/export-runtime-bundle.sh remnawave/node:latest
 ```
-
-If you need extra files:
 
 ```sh
 INCLUDE_PATHS="dist node_modules package.json prisma templates" \
 ./scripts/export-runtime-bundle.sh remnawave/node:latest
 ```
 
-## 2. Transfer the Bundle
+## GitHub Actions Export
 
-Copy the generated tarball to the target host, for example:
+The workflow [`.github/workflows/runtime-bundle.yml`](../.github/workflows/runtime-bundle.yml):
 
-```sh
-scp out/remnanode-runtime-*.tar.gz root@your-host:/root/
-```
+- checks `remnawave/node:latest` once per day
+- compares the upstream image digest with the latest published release
+- publishes a new release only when the digest changed
 
-If you publish GitHub releases from Actions, the host can also consume these stable asset names:
+Stable release asset:
 
 - `remnanode-runtime-latest.tar.gz`
 
-The scheduled GitHub Actions workflow checks the upstream image digest once per day and only republishes this asset when the official runtime changed.
+## VPS Install
 
-## 3. Install or Update Runtime On the Target Host
-
-On the Alpine host:
-
-```sh
-./scripts/install-runtime-bundle.sh /root/remnanode-runtime-<stamp>.tar.gz
-```
-
-For a first-time host bootstrap directly from the repository:
+Run on the VPS:
 
 ```sh
 apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-panel.sh && \
-sh /root/one-click-panel.sh
+sh /root/one-click-panel.sh install
 ```
 
-That panel script can drive both first install and later updates. The install path writes the OpenRC and supervisord files directly on the host, then downloads only the runtime bundle from the latest GitHub release.
-
-This installs into a release directory and repoints:
+That install path pulls the latest runtime bundle from GitHub Releases and writes:
 
 ```text
 /opt/remnanode/current -> /opt/remnanode/releases/<release-id>
 ```
 
-That makes updates reversible without rebuilding on the host.
+## VPS Upgrade
 
-Optional custom target:
+Run on the VPS:
 
 ```sh
-./scripts/install-runtime-bundle.sh /root/remnanode-runtime-<stamp>.tar.gz /srv/remnanode
+apk add --no-cache curl && \
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh update
 ```
 
-## 4. Restart the Service
+That update path:
 
-After updating:
+- downloads the latest release asset
+- installs it into a new release directory
+- repoints `/opt/remnanode/current`
+- restarts `remnanode`
+
+## Rollback
+
+Because each runtime lands in its own release directory, rollback is just:
 
 ```sh
+ln -sfn /opt/remnanode/releases/<previous-release-id> /opt/remnanode/current && \
 rc-service remnanode restart
 ```
 
-If you want a sanity check before restart:
+## Important Boundary
 
-```sh
-./scripts/check-remnanode-layout.sh /opt/remnanode/current
-```
+GitHub Actions publishes runtime bundles.
 
-If the host has been configured for pull-based updates:
+The VPS pulls runtime bundles.
 
-```sh
-/usr/local/bin/remnanode-update-from-github
-```
-
-Updating the runtime bundle does not replace your application-specific env choices. Keep `/etc/remnanode/remnanode.env` aligned with the panel, especially:
-
-- `NODE_PORT`
-- `SECRET_KEY`
-
-## 5. Roll Back
-
-Because each deployment lands in its own release directory, rollbacks are symlink-only:
-
-```sh
-ln -sfn /opt/remnanode/releases/<previous-release-id> /opt/remnanode/current
-rc-service remnanode restart
-```
-
-## 6. What Is Not Verified Here
-
-This repository does not embed the official image and cannot prove the exact app root ahead of time.
-
-The export script handles this by:
-
-- trying common container paths
-- allowing `APP_ROOT` override
-- allowing `INCLUDE_PATHS` override
-
-If the upstream image layout changes, the export command may need an explicit `APP_ROOT` or broader include list.
+There is no runner-to-VPS SSH step in the current design.
