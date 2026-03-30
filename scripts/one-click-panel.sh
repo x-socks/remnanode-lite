@@ -4,6 +4,7 @@ set -eu
 
 ACTION="${1:-${ACTION:-auto}}"
 REPO_SLUG="${2:-${REPO_SLUG:-x-socks/remnanode-lite}}"
+REPO_REF="${3:-${REPO_REF:-main}}"
 BASE_DIR="${BASE_DIR:-/opt/remnanode}"
 
 require_root() {
@@ -121,12 +122,12 @@ run_remote_script() {
     trap cleanup EXIT INT TERM
 
     script_path="${WORK_DIR}/${script_name}"
-    script_url="https://raw.githubusercontent.com/${REPO_SLUG}/main/scripts/${script_name}"
+    script_url="https://raw.githubusercontent.com/${REPO_SLUG}/${REPO_REF}/scripts/${script_name}"
 
     printf '%s\n' "downloading ${script_url}"
     download_file "${script_url}" "${script_path}"
 
-    exec env BASE_DIR="${BASE_DIR}" sh "${script_path}" "${REPO_SLUG}"
+    exec env BASE_DIR="${BASE_DIR}" REPO_REF="${REPO_REF}" sh "${script_path}" "${REPO_SLUG}"
 }
 
 require_root

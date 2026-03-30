@@ -10,7 +10,7 @@
 - 不让 GitHub Actions 直接连接 VPS
 - 只保留 VPS 自主拉取 GitHub Release 的发布模型
 - 首次安装和后续升级都走统一入口
-- 兼容 256 MB 内存、无 swap、Alpine musl、OpenRC 的实际环境
+- 兼容极低内存、无 swap、Alpine musl、OpenRC 的实际环境
 
 ## 最终架构
 
@@ -21,9 +21,9 @@
 3. Runner 发布 `remnanode-runtime-latest.tar.gz` 到 GitHub Releases
 4. VPS 通过 `one-click-panel.sh` 选择 `install` 或 `update`
 5. VPS 自己下载 runtime bundle
-6. VPS 本地写入 OpenRC、supervisord、env 配置
+6. VPS 本地写入 OpenRC、xray sidecar、env 配置
 7. VPS 本地启动 `remnanode-start`
-8. Remnanode 以 Node.js 原生进程运行，并通过 supervisord 管理 Xray
+8. Remnanode 以 Node.js 原生进程运行，并由 OpenRC 直接管理 Xray
 
 这意味着：
 
@@ -52,7 +52,7 @@
 
 - `one-click-panel.sh` 负责交互入口
 - `one-click-deploy.sh` 负责首次安装
-- `one-click-upgrade.sh` 负责后续升级
+- `one-click-upgrade.sh` 负责后续升级与宿主机侧收敛
 - `export-runtime-bundle.sh` 负责从官方镜像导出 runtime
 
 历史兼容脚本和旧 bootstrap 流程已移除，避免后续维护时再次混入旧架构。
@@ -62,16 +62,17 @@
 安装脚本已内联写入：
 
 - OpenRC service
-- `supervisord.conf`
+- `remnanode-xray` OpenRC service
 - `/etc/remnanode/remnanode.env`
 - `/etc/remnanode/github-release.env`
 - `/usr/local/bin/remnanode-start`
+- `/usr/local/bin/remnanode-xray-start`
 
 这意味着 release 资产只包含官方 runtime，不再夹带 host-tools。
 
 ### 4. 统一运行时变量
 
-当前运行时已统一为：
+当前运行时对面板仍统一为：
 
 - `NODE_PORT`
 - `SECRET_KEY`
@@ -91,7 +92,9 @@
 - Node 版本必须与当前官方 runtime 匹配，最终以 `24.x` 为准
 - `NODE_OPTIONS` 需要正确 quoting，避免 shell 误解析
 - `/etc/remnanode` 及 env 文件权限需要允许服务进程读取
-- 启动前需要清理 stale `supervisord` socket 和旧 Node 进程
+- 为了逼近 `128 MB`，已移除 `supervisord`，改为 OpenRC 直管 `remnanode` 与 `remnanode-xray`
+- 启动前需要清理 stale unix socket、旧 Node 进程和遗留的 `supervisord`/`xray` 进程
+- `128 MB` 当前只应视为实验性下限，`256 MB` 仍是更稳妥的基线
 
 ## 当前仓库状态
 

@@ -7,11 +7,11 @@ Validated host state:
 - Alpine `3.23.x`
 - OpenRC
 - Node.js `24.x`
-- `supervisord`
 - local Xray binary at `/usr/local/bin/xray`
 - `/usr/local/bin/rw-core -> /usr/local/bin/xray`
 - Remnanode runtime under `/opt/remnanode/releases/...`
 - `/opt/remnanode/current` symlinked to the active release
+- `128 MB` is experimental; `256 MB` is still the safer operating point
 
 ## First Install
 
@@ -32,8 +32,7 @@ The installer will:
 - prompt for `NODE_PORT`
 - prompt for `SECRET_KEY`
 - write `/etc/remnanode/remnanode.env`
-- write `/etc/supervisord.conf`
-- write OpenRC service files
+- write OpenRC service files for both `remnanode` and `remnanode-xray`
 - start `remnanode`
 
 Accepted `SECRET_KEY` input:
@@ -56,10 +55,12 @@ sh /root/one-click-panel.sh update
 
 - `/etc/remnanode/remnanode.env`
 - `/etc/remnanode/github-release.env`
-- `/etc/supervisord.conf`
 - `/etc/init.d/remnanode`
+- `/etc/init.d/remnanode-xray`
 - `/etc/conf.d/remnanode`
+- `/etc/conf.d/remnanode-xray`
 - `/usr/local/bin/remnanode-start`
+- `/usr/local/bin/remnanode-xray-start`
 - `/opt/remnanode/current`
 
 ## Required Variables
@@ -75,11 +76,14 @@ Also used by the current host layout:
 - `XRAY_BIN=/usr/local/bin/xray`
 - `XRAY_CONFIG=/etc/xray/config.json`
 - `XRAY_ASSET_DIR=/usr/local/share/xray`
+- `INTERNAL_REST_TOKEN=<stable local token>`
+- `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
+- `XRAY_START_TIMEOUT=20`
 
 Low-memory defaults:
 
-- `NODE_OPTIONS='--max-http-header-size=65536 --max-old-space-size=64 --max-semi-space-size=1'`
-- `MALLOC_ARENA_MAX=2`
+- `NODE_OPTIONS='--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1'`
+- `MALLOC_ARENA_MAX=1`
 - `UV_THREADPOOL_SIZE=1`
 - `REMNANODE_ULIMIT_NOFILE=65535`
 
@@ -87,9 +91,8 @@ Low-memory defaults:
 
 - `/var/log/remnanode/remnanode.log`
 - `/var/log/remnanode/remnanode.err`
-- `/var/log/supervisor/supervisord.log`
-- `/var/log/supervisor/xray.out.log`
-- `/var/log/supervisor/xray.err.log`
+- `/var/log/remnanode/xray.log`
+- `/var/log/remnanode/xray.err`
 
 ## Runtime Layout
 
@@ -110,6 +113,7 @@ Expected active tree:
 - Let the VPS pull runtime bundles from GitHub Releases.
 - Let GitHub Actions only publish releases.
 - Keep file descriptor limits high.
+- On `128 MB` hosts, treat these defaults as experimental and expect little burst headroom.
 - On 256 MB hosts, raising V8 heap limits usually makes OOM behavior worse.
 
 ## Common Failure Modes
@@ -124,18 +128,18 @@ Expected active tree:
 - The panel secret was empty or truncated.
 - Paste the full payload from the panel.
 
-`Supervisord socket file not found`
+`remnanode-xray-start: internal socket not ready`
 
-- `supervisord` did not come up cleanly.
-- Check `/var/log/supervisor/supervisord.log`.
+- `remnanode` did not expose its internal unix socket in time.
 - Check `/var/log/remnanode/remnanode.err`.
+- Check `/var/log/remnanode/xray.err`.
 
 `connect ECONNREFUSED 127.0.0.1:61000`
 
 - Xray did not fully start or its internal API is not ready.
-- Check the supervisor logs and Xray logs first.
+- Check the remnanode and xray logs first.
 
 `Killed` or exit code `137`
 
 - The container hit its memory limit.
-- Do not increase heap size blindly on 256 MB hosts.
+- Do not increase heap size blindly on `128 MB` or `256 MB` hosts.

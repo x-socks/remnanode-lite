@@ -13,6 +13,17 @@ fi
 REPO_SLUG="${1:-${REPO_SLUG:-x-socks/remnanode-lite}}"
 RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-remnanode-runtime-latest.tar.gz}"
 BASE_DIR="${BASE_DIR:-/opt/remnanode}"
+REMNANODE_ENV_FILE="${REMNANODE_ENV_FILE:-/etc/remnanode/remnanode.env}"
+
+if [ -f "${REMNANODE_ENV_FILE}" ]; then
+    set -a
+    . "${REMNANODE_ENV_FILE}"
+    set +a
+fi
+
+INTERNAL_REST_TOKEN="${INTERNAL_REST_TOKEN:-}"
+INTERNAL_SOCKET_PATH="${INTERNAL_SOCKET_PATH:-/run/remnanode-internal.sock}"
+XRAY_START_TIMEOUT="${XRAY_START_TIMEOUT:-20}"
 
 require_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -44,6 +55,313 @@ download_file() {
 
     echo "missing curl or wget" >&2
     exit 1
+}
+
+generate_random() {
+    length="${1:-64}"
+    tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c "${length}"
+}
+
+shell_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+update_key_value_file() {
+    file_path="$1"
+    key_name="$2"
+    value="$3"
+    temp_file="${WORK_DIR}/$(basename "${file_path}").tmp"
+    quoted_value="$(shell_quote "${value}")"
+
+    if [ -f "${file_path}" ]; then
+        grep -v "^${key_name}=" "${file_path}" > "${temp_file}" || true
+    else
+        : > "${temp_file}"
+    fi
+
+    printf '%s=%s\n' "${key_name}" "${quoted_value}" >> "${temp_file}"
+    mv "${temp_file}" "${file_path}"
+    chown root:root "${file_path}" 2>/dev/null || true
+    chmod 600 "${file_path}" 2>/dev/null || true
+}
+
+ensure_layout() {
+    mkdir -p /etc/remnanode
+    mkdir -p /etc/xray
+    mkdir -p /usr/local/bin
+    mkdir -p /usr/local/share/xray
+    mkdir -p /var/log/remnanode
+    mkdir -p /etc/conf.d
+    mkdir -p /etc/init.d
+    mkdir -p "${BASE_DIR}/releases"
+    chmod 700 /etc/remnanode 2>/dev/null || true
+}
+
+install_remnanode_service() {
+    cat > /etc/init.d/remnanode <<'EOF'
+#!/sbin/openrc-run
+
+description="Remnanode bare-metal service"
+
+: "${command:=/usr/local/bin/remnanode-start}"
+: "${command_user:=root:root}"
+: "${directory:=/opt/remnanode/current}"
+: "${pidfile:=/run/remnanode.pid}"
+: "${output_log:=/var/log/remnanode/remnanode.log}"
+: "${error_log:=/var/log/remnanode/remnanode.err}"
+: "${respawn_delay:=5}"
+: "${respawn_max:=0}"
+
+supervisor=supervise-daemon
+command_background=true
+
+depend() {
+    need net localmount
+    after firewall
+    use dns logger
+}
+
+start_pre() {
+    checkpath -d -m 0755 -o "${command_user}" /var/log/remnanode
+    checkpath -f -m 0644 -o "${command_user}" "${output_log}"
+    checkpath -f -m 0644 -o "${command_user}" "${error_log}"
+
+    if [ ! -x "${command}" ]; then
+        eerror "Missing executable: ${command}"
+        return 1
+    fi
+
+    if [ ! -d "${directory}" ]; then
+        eerror "Missing application directory: ${directory}"
+        return 1
+    fi
+}
+
+start_post() {
+    if rc-service remnanode-xray status >/dev/null 2>&1; then
+        rc-service remnanode-xray restart >/dev/null 2>&1 || return 1
+    else
+        rc-service remnanode-xray start >/dev/null 2>&1 || return 1
+    fi
+}
+
+stop_pre() {
+    rc-service remnanode-xray stop >/dev/null 2>&1 || true
+}
+EOF
+    chmod 755 /etc/init.d/remnanode
+
+    cat > /etc/conf.d/remnanode <<'EOF'
+# OpenRC service configuration for Remnanode
+command=/usr/local/bin/remnanode-start
+command_user=root:root
+directory=/opt/remnanode/current
+pidfile=/run/remnanode.pid
+output_log=/var/log/remnanode/remnanode.log
+error_log=/var/log/remnanode/remnanode.err
+respawn_delay=5
+respawn_max=0
+EOF
+    chmod 644 /etc/conf.d/remnanode
+}
+
+install_remnanode_xray_service() {
+    cat > /etc/init.d/remnanode-xray <<'EOF'
+#!/sbin/openrc-run
+
+description="Remnanode Xray sidecar"
+
+: "${command:=/usr/local/bin/remnanode-xray-start}"
+: "${command_user:=root:root}"
+: "${pidfile:=/run/remnanode-xray.pid}"
+: "${output_log:=/var/log/remnanode/xray.log}"
+: "${error_log:=/var/log/remnanode/xray.err}"
+: "${respawn_delay:=5}"
+: "${respawn_max:=0}"
+
+supervisor=supervise-daemon
+command_background=true
+
+depend() {
+    need remnanode
+    after remnanode
+    use dns logger
+}
+
+start_pre() {
+    checkpath -d -m 0755 -o "${command_user}" /var/log/remnanode
+    checkpath -f -m 0644 -o "${command_user}" "${output_log}"
+    checkpath -f -m 0644 -o "${command_user}" "${error_log}"
+
+    if [ ! -x "${command}" ]; then
+        eerror "Missing executable: ${command}"
+        return 1
+    fi
+}
+EOF
+    chmod 755 /etc/init.d/remnanode-xray
+
+    cat > /etc/conf.d/remnanode-xray <<'EOF'
+# OpenRC service configuration for the Remnanode Xray sidecar
+command=/usr/local/bin/remnanode-xray-start
+command_user=root:root
+pidfile=/run/remnanode-xray.pid
+output_log=/var/log/remnanode/xray.log
+error_log=/var/log/remnanode/xray.err
+respawn_delay=5
+respawn_max=0
+EOF
+    chmod 644 /etc/conf.d/remnanode-xray
+}
+
+install_remnanode_xray_start() {
+    cat > /usr/local/bin/remnanode-xray-start <<'EOF'
+#!/bin/sh
+
+set -eu
+
+ENV_FILE="${REMNANODE_ENV_FILE:-/etc/remnanode/remnanode.env}"
+
+if [ -f "${ENV_FILE}" ]; then
+    set -a
+    . "${ENV_FILE}"
+    set +a
+fi
+
+XRAY_BIN="${XRAY_SIDELOAD_BIN:-/usr/local/bin/rw-core}"
+
+: "${INTERNAL_REST_TOKEN:?INTERNAL_REST_TOKEN is required}"
+: "${INTERNAL_SOCKET_PATH:=/run/remnanode-internal.sock}"
+: "${XRAY_START_TIMEOUT:=20}"
+
+if [ ! -x "${XRAY_BIN}" ]; then
+    echo "remnanode-xray-start: missing binary: ${XRAY_BIN}" >&2
+    exit 1
+fi
+
+wait_seconds="${XRAY_START_TIMEOUT}"
+while [ "${wait_seconds}" -gt 0 ]; do
+    if [ -S "${INTERNAL_SOCKET_PATH}" ]; then
+        break
+    fi
+    sleep 1
+    wait_seconds=$((wait_seconds - 1))
+done
+
+if [ ! -S "${INTERNAL_SOCKET_PATH}" ]; then
+    echo "remnanode-xray-start: internal socket not ready: ${INTERNAL_SOCKET_PATH}" >&2
+    exit 1
+fi
+
+exec "${XRAY_BIN}" -config "http+unix://${INTERNAL_SOCKET_PATH}/internal/get-config?token=${INTERNAL_REST_TOKEN}" -format json
+EOF
+    chmod 755 /usr/local/bin/remnanode-xray-start
+}
+
+install_remnanode_start() {
+    cat > /usr/local/bin/remnanode-start <<'EOF'
+#!/bin/sh
+
+set -eu
+
+ENV_FILE="${REMNANODE_ENV_FILE:-/etc/remnanode/remnanode.env}"
+
+if [ -f "${ENV_FILE}" ]; then
+    set -a
+    . "${ENV_FILE}"
+    set +a
+fi
+
+APP_DIR="${REMNANODE_APP_DIR:-/opt/remnanode/current}"
+ENTRYPOINT="${REMNANODE_ENTRYPOINT:-dist/src/main.js}"
+NODE_BIN="${NODE_BIN:-node}"
+NOFILE_LIMIT="${REMNANODE_ULIMIT_NOFILE:-65535}"
+
+: "${NODE_PORT:?NODE_PORT is required}"
+: "${SECRET_KEY:?SECRET_KEY is required}"
+: "${INTERNAL_REST_TOKEN:?INTERNAL_REST_TOKEN is required}"
+: "${XTLS_API_PORT:=61000}"
+INTERNAL_SOCKET_PATH="${INTERNAL_SOCKET_PATH:-/run/remnanode-internal.sock}"
+
+export NODE_PORT SECRET_KEY XTLS_API_PORT
+export INTERNAL_REST_TOKEN INTERNAL_SOCKET_PATH
+
+if [ ! -d "${APP_DIR}" ]; then
+    echo "remnanode-start: missing app dir: ${APP_DIR}" >&2
+    exit 1
+fi
+
+if [ -f "${APP_DIR}/${ENTRYPOINT}" ]; then
+    MAIN_FILE="${APP_DIR}/${ENTRYPOINT}"
+elif [ -f "${APP_DIR}/${ENTRYPOINT}.js" ]; then
+    MAIN_FILE="${APP_DIR}/${ENTRYPOINT}.js"
+else
+    echo "remnanode-start: missing entrypoint: ${APP_DIR}/${ENTRYPOINT}" >&2
+    exit 1
+fi
+
+ulimit -n "${NOFILE_LIMIT}" 2>/dev/null || true
+
+export NODE_ENV="${REMNANODE_ENV:-production}"
+export NODE_OPTIONS="${NODE_OPTIONS:---max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1}"
+export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-1}"
+export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-1}"
+export XRAY_CORE_VERSION="$([ -x /usr/local/bin/rw-core ] && /usr/local/bin/rw-core version | head -n 1 || true)"
+
+cleanup_stale_node_processes() {
+    stale_pids="$(ps -o pid,args | awk -v main_file="${MAIN_FILE}" '$1 ~ /^[0-9]+$/ && index($0, "node " main_file) > 0 { print $1 }')"
+
+    if [ -n "${stale_pids}" ]; then
+        printf '%s\n' "remnanode-start: stopping stale node processes for ${MAIN_FILE}" >&2
+        for pid in ${stale_pids}; do
+            kill "${pid}" 2>/dev/null || true
+        done
+        sleep 1
+        for pid in ${stale_pids}; do
+            kill -9 "${pid}" 2>/dev/null || true
+        done
+    fi
+}
+
+cleanup_stale_node_processes
+rm -f "${INTERNAL_SOCKET_PATH}" 2>/dev/null || true
+pkill -x supervisord 2>/dev/null || true
+pkill -x xray 2>/dev/null || true
+pkill -x rw-core 2>/dev/null || true
+
+cd "${APP_DIR}"
+exec "${NODE_BIN}" "${MAIN_FILE}"
+EOF
+    chmod 755 /usr/local/bin/remnanode-start
+}
+
+refresh_host_runtime() {
+    current_node_options="${NODE_OPTIONS:-}"
+    current_malloc_arena_max="${MALLOC_ARENA_MAX:-}"
+
+    ensure_layout
+    install_remnanode_service
+    install_remnanode_xray_service
+    install_remnanode_xray_start
+    install_remnanode_start
+
+    if [ -z "${INTERNAL_REST_TOKEN}" ]; then
+        INTERNAL_REST_TOKEN="$(generate_random 64)"
+    fi
+
+    update_key_value_file "${REMNANODE_ENV_FILE}" INTERNAL_REST_TOKEN "${INTERNAL_REST_TOKEN}"
+    update_key_value_file "${REMNANODE_ENV_FILE}" INTERNAL_SOCKET_PATH "${INTERNAL_SOCKET_PATH}"
+    update_key_value_file "${REMNANODE_ENV_FILE}" XRAY_START_TIMEOUT "${XRAY_START_TIMEOUT}"
+
+    if [ -z "${current_node_options}" ] || [ "${current_node_options}" = "--max-http-header-size=65536 --max-old-space-size=64 --max-semi-space-size=1" ]; then
+        update_key_value_file "${REMNANODE_ENV_FILE}" NODE_OPTIONS "--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1"
+    fi
+
+    if [ -z "${current_malloc_arena_max}" ] || [ "${current_malloc_arena_max}" = "2" ]; then
+        update_key_value_file "${REMNANODE_ENV_FILE}" MALLOC_ARENA_MAX 1
+    fi
+
+    update_key_value_file "${REMNANODE_ENV_FILE}" UV_THREADPOOL_SIZE 1
 }
 
 install_runtime_bundle() {
@@ -143,6 +461,7 @@ runtime_url="https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_
 printf '%s\n' "downloading ${runtime_url}"
 download_file "${runtime_url}" "${runtime_bundle}"
 
+refresh_host_runtime
 install_runtime_bundle "${runtime_bundle}"
 check_layout
 
@@ -152,7 +471,13 @@ sleep 3
 
 printf '%s\n' "===== service status ====="
 rc-service remnanode status || true
+printf '%s\n' "===== xray service status ====="
+rc-service remnanode-xray status || true
 printf '%s\n' "===== /var/log/remnanode/remnanode.log ====="
 tail -n 40 /var/log/remnanode/remnanode.log || true
 printf '%s\n' "===== /var/log/remnanode/remnanode.err ====="
 tail -n 40 /var/log/remnanode/remnanode.err || true
+printf '%s\n' "===== /var/log/remnanode/xray.log ====="
+tail -n 40 /var/log/remnanode/xray.log || true
+printf '%s\n' "===== /var/log/remnanode/xray.err ====="
+tail -n 40 /var/log/remnanode/xray.err || true
