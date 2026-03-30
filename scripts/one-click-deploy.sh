@@ -10,6 +10,10 @@ SECRET_INPUT="${SECRET_INPUT:-${SECRET_KEY:-}}"
 INTERNAL_REST_TOKEN="${INTERNAL_REST_TOKEN:-}"
 INTERNAL_SOCKET_PATH="${INTERNAL_SOCKET_PATH:-/run/remnanode-internal.sock}"
 XRAY_START_TIMEOUT="${XRAY_START_TIMEOUT:-20}"
+SUPERVISORD_USER="${SUPERVISORD_USER:-}"
+SUPERVISORD_PASSWORD="${SUPERVISORD_PASSWORD:-}"
+SUPERVISORD_SOCKET_PATH="${SUPERVISORD_SOCKET_PATH:-/run/supervisord.sock}"
+SUPERVISORD_PID_PATH="${SUPERVISORD_PID_PATH:-/run/supervisord.pid}"
 
 require_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -353,6 +357,12 @@ REMNANODE_ULIMIT_NOFILE=65535
 INTERNAL_REST_TOKEN=
 INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock
 XRAY_START_TIMEOUT=20
+
+# Compatibility variables still required by the current Remnanode runtime.
+SUPERVISORD_USER=
+SUPERVISORD_PASSWORD=
+SUPERVISORD_SOCKET_PATH=/run/supervisord.sock
+SUPERVISORD_PID_PATH=/run/supervisord.pid
 
 # Optional extra tuning
 # NODE_NO_WARNINGS=1
@@ -765,9 +775,19 @@ update_key_value_file /etc/remnanode/remnanode.env XRAY_ASSET_DIR /usr/local/sha
 if [ -z "${INTERNAL_REST_TOKEN}" ]; then
     INTERNAL_REST_TOKEN="$(generate_random 64)"
 fi
+if [ -z "${SUPERVISORD_USER}" ]; then
+    SUPERVISORD_USER="$(generate_random 32)"
+fi
+if [ -z "${SUPERVISORD_PASSWORD}" ]; then
+    SUPERVISORD_PASSWORD="$(generate_random 64)"
+fi
 update_key_value_file /etc/remnanode/remnanode.env INTERNAL_REST_TOKEN "${INTERNAL_REST_TOKEN}"
 update_key_value_file /etc/remnanode/remnanode.env INTERNAL_SOCKET_PATH "${INTERNAL_SOCKET_PATH}"
 update_key_value_file /etc/remnanode/remnanode.env XRAY_START_TIMEOUT "${XRAY_START_TIMEOUT}"
+update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_USER "${SUPERVISORD_USER}"
+update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_PASSWORD "${SUPERVISORD_PASSWORD}"
+update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_SOCKET_PATH "${SUPERVISORD_SOCKET_PATH}"
+update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_PID_PATH "${SUPERVISORD_PID_PATH}"
 update_key_value_file /etc/remnanode/remnanode.env NODE_OPTIONS "--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1"
 update_key_value_file /etc/remnanode/remnanode.env MALLOC_ARENA_MAX 1
 update_key_value_file /etc/remnanode/remnanode.env UV_THREADPOOL_SIZE 1
