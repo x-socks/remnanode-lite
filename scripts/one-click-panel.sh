@@ -5,6 +5,7 @@ set -eu
 ACTION="${1:-${ACTION:-auto}}"
 REPO_SLUG="${2:-${REPO_SLUG:-x-socks/remnanode-lite}}"
 REPO_REF="${3:-${REPO_REF:-main}}"
+RUNTIME_VERSION="${4:-${RUNTIME_VERSION:-latest}}"
 BASE_DIR="${BASE_DIR:-/opt/remnanode}"
 
 require_root() {
@@ -50,6 +51,20 @@ normalize_action() {
         *)
             echo "invalid action: $1" >&2
             exit 1
+            ;;
+    esac
+}
+
+normalize_runtime_version() {
+    case "$1" in
+        ""|latest|LATEST)
+            printf '%s\n' latest
+            ;;
+        v[0-9]*)
+            printf '%s\n' "${1#v}"
+            ;;
+        *)
+            printf '%s\n' "$1"
             ;;
     esac
 }
@@ -106,6 +121,30 @@ EOF
     done
 }
 
+choose_runtime_version() {
+    selected_version="$(normalize_runtime_version "${RUNTIME_VERSION}")"
+
+    if [ -n "${selected_version}" ] && [ "${selected_version}" != "latest" ]; then
+        printf '%s\n' "${selected_version}"
+        return 0
+    fi
+
+    if [ ! -t 0 ]; then
+        printf '%s\n' latest
+        return 0
+    fi
+
+    printf '%s' "Runtime version [latest]: " >&2
+    IFS= read -r selected || true
+
+    if [ -z "${selected}" ]; then
+        printf '%s\n' latest
+        return 0
+    fi
+
+    normalize_runtime_version "${selected}"
+}
+
 run_remote_script() {
     script_name="$1"
 
@@ -127,12 +166,13 @@ run_remote_script() {
     printf '%s\n' "downloading ${script_url}"
     download_file "${script_url}" "${script_path}"
 
-    exec env BASE_DIR="${BASE_DIR}" REPO_REF="${REPO_REF}" sh "${script_path}" "${REPO_SLUG}"
+    exec env BASE_DIR="${BASE_DIR}" REPO_REF="${REPO_REF}" RUNTIME_VERSION="${RUNTIME_VERSION}" sh "${script_path}" "${REPO_SLUG}" "${RUNTIME_VERSION}"
 }
 
 require_root
 
 selected_action="$(choose_action)"
+RUNTIME_VERSION="$(choose_runtime_version)"
 
 case "${selected_action}" in
     install)

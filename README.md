@@ -9,7 +9,7 @@ flowchart TB
     A["官方 remnawave/node 镜像"] --> B["GitHub Actions Runner"]
     B --> C["导出 runtime bundle"]
     C --> D["GitHub Release"]
-    D --> E["remnanode-runtime-latest.tar.gz"]
+    D --> E["remnanode-runtime-<version>.tar.gz + latest 别名"]
 
     F["VPS: one-click-panel.sh"] --> G["install"]
     F --> H["update"]
@@ -33,7 +33,7 @@ The current repository is designed to match the new architecture:
 - GitHub Actions runs only on GitHub's runner
 - the runner only exports and publishes the upstream Remnanode runtime bundle
 - the runner does not SSH into the VPS
-- the VPS pulls `remnanode-runtime-latest.tar.gz` from GitHub Releases by itself
+- the VPS pulls either the latest runtime alias or a versioned runtime bundle from GitHub Releases by itself
 - `install` writes host-local OpenRC, supervisord, and env files
 - `update` refreshes host-side service files, pulls a newer runtime, switches the active release, and restarts the services
 
@@ -55,6 +55,15 @@ apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh install
+```
+
+Direct install with a pinned runtime version:
+
+```sh
+apk add --no-cache curl && \
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
+RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh install
 ```
 
 Direct update:
@@ -99,8 +108,8 @@ Current practice matches the target architecture:
 
 - [`.github/workflows/runtime-bundle.yml`](.github/workflows/runtime-bundle.yml) only exports and publishes release assets
 - [`scripts/one-click-panel.sh`](scripts/one-click-panel.sh) only chooses `install` or `update` and downloads the matching host-side script
-- [`scripts/one-click-deploy.sh`](scripts/one-click-deploy.sh) installs host dependencies, writes local OpenRC and minimal supervisord config, downloads runtime from GitHub Releases, and starts the service
-- [`scripts/one-click-upgrade.sh`](scripts/one-click-upgrade.sh) refreshes host-side service files, downloads the latest runtime from GitHub Releases, installs it into a new release directory, switches `current`, and restarts `remnanode`
+- [`scripts/one-click-deploy.sh`](scripts/one-click-deploy.sh) installs host dependencies, writes local OpenRC and minimal supervisord config, downloads the selected runtime from GitHub Releases, and starts the service
+- [`scripts/one-click-upgrade.sh`](scripts/one-click-upgrade.sh) refreshes host-side service files, downloads the selected runtime from GitHub Releases, installs it into a new release directory, switches `current`, and restarts `remnanode`
 
 One minor implementation detail:
 

@@ -11,7 +11,9 @@ if [ -f "${ENV_FILE}" ]; then
 fi
 
 REPO_SLUG="${1:-${REPO_SLUG:-x-socks/remnanode-lite}}"
-RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-remnanode-runtime-latest.tar.gz}"
+RUNTIME_VERSION_INPUT="${2:-${RUNTIME_VERSION:-}}"
+RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-}"
+RUNTIME_RELEASE_TAG="${RUNTIME_RELEASE_TAG:-}"
 BASE_DIR="${BASE_DIR:-/opt/remnanode}"
 REMNANODE_ENV_FILE="${REMNANODE_ENV_FILE:-/etc/remnanode/remnanode.env}"
 
@@ -43,6 +45,31 @@ require_cmd() {
     fi
 }
 
+prompt_with_default() {
+    prompt_text="$1"
+    current_value="$2"
+    default_value="$3"
+
+    if [ -n "${current_value}" ]; then
+        printf '%s\n' "${current_value}"
+        return 0
+    fi
+
+    if [ ! -t 0 ]; then
+        printf '%s\n' "${default_value}"
+        return 0
+    fi
+
+    printf '%s' "${prompt_text}" >&2
+    IFS= read -r input_value || true
+    if [ -n "${input_value}" ]; then
+        printf '%s\n' "${input_value}"
+        return 0
+    fi
+
+    printf '%s\n' "${default_value}"
+}
+
 download_file() {
     url="$1"
     out="$2"
@@ -59,6 +86,99 @@ download_file() {
 
     echo "missing curl or wget" >&2
     exit 1
+}
+
+normalize_runtime_version() {
+    case "$1" in
+        ""|latest|LATEST)
+            printf '%s\n' latest
+            ;;
+        v[0-9]*)
+            printf '%s\n' "${1#v}"
+            ;;
+        *)
+            printf '%s\n' "$1"
+            ;;
+    esac
+}
+
+infer_runtime_version_from_asset_name() {
+    case "$1" in
+        remnanode-runtime-latest.tar.gz)
+            printf '%s\n' latest
+            ;;
+        remnanode-runtime-*.tar.gz)
+            asset_version="${1#remnanode-runtime-}"
+            printf '%s\n' "${asset_version%.tar.gz}"
+            ;;
+        *)
+            printf '%s\n' ""
+            ;;
+    esac
+}
+
+resolve_runtime_version() {
+    version_input="$1"
+    asset_name="$2"
+
+    if [ -n "${version_input}" ]; then
+        normalize_runtime_version "${version_input}"
+        return 0
+    fi
+
+    inferred_version="$(infer_runtime_version_from_asset_name "${asset_name}")"
+    if [ -n "${inferred_version}" ]; then
+        normalize_runtime_version "${inferred_version}"
+        return 0
+    fi
+
+    printf '%s\n' latest
+}
+
+resolve_runtime_asset_name() {
+    runtime_version="$1"
+    configured_asset_name="$2"
+    version_input="$3"
+
+    if [ -n "${configured_asset_name}" ] && [ -z "${version_input}" ]; then
+        printf '%s\n' "${configured_asset_name}"
+        return 0
+    fi
+
+    if [ "${runtime_version}" = "latest" ]; then
+        printf '%s\n' remnanode-runtime-latest.tar.gz
+    else
+        printf 'remnanode-runtime-%s.tar.gz\n' "${runtime_version}"
+    fi
+}
+
+resolve_runtime_release_tag() {
+    runtime_version="$1"
+    configured_release_tag="$2"
+
+    if [ -n "${configured_release_tag}" ]; then
+        printf '%s\n' "${configured_release_tag}"
+        return 0
+    fi
+
+    if [ "${runtime_version}" = "latest" ]; then
+        printf '%s\n' ""
+    else
+        printf 'runtime-%s\n' "${runtime_version}"
+    fi
+}
+
+build_runtime_download_url() {
+    repo_slug="$1"
+    runtime_version="$2"
+    asset_name="$3"
+    release_tag="$4"
+
+    if [ "${runtime_version}" = "latest" ]; then
+        printf 'https://github.com/%s/releases/latest/download/%s\n' "${repo_slug}" "${asset_name}"
+    else
+        printf 'https://github.com/%s/releases/download/%s/%s\n' "${repo_slug}" "${release_tag}" "${asset_name}"
+    fi
 }
 
 generate_random() {
@@ -433,6 +553,11 @@ require_cmd ln
 require_cmd rc-update
 require_cmd rc-service
 
+RUNTIME_VERSION="$(prompt_with_default 'RUNTIME_VERSION [latest]: ' "${RUNTIME_VERSION_INPUT}" latest)"
+RUNTIME_VERSION="$(resolve_runtime_version "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}")"
+RUNTIME_ASSET_NAME="$(resolve_runtime_asset_name "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}" "${RUNTIME_VERSION_INPUT}")"
+RUNTIME_RELEASE_TAG="$(resolve_runtime_release_tag "${RUNTIME_VERSION}" "${RUNTIME_RELEASE_TAG}")"
+
 WORK_ROOT="${HOME:-/root}/.remnanode-work"
 WORK_DIR="${WORK_ROOT}/one-click-upgrade.$$"
 mkdir -p "${WORK_ROOT}"
@@ -446,7 +571,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 runtime_bundle="${WORK_DIR}/${RUNTIME_ASSET_NAME}"
-runtime_url="https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_ASSET_NAME}"
+runtime_url="$(build_runtime_download_url "${REPO_SLUG}" "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}" "${RUNTIME_RELEASE_TAG}")"
 
 printf '%s\n' "downloading ${runtime_url}"
 download_file "${runtime_url}" "${runtime_bundle}"
@@ -454,6 +579,9 @@ download_file "${runtime_url}" "${runtime_bundle}"
 refresh_host_runtime
 install_runtime_bundle "${runtime_bundle}"
 check_layout
+update_key_value_file "${ENV_FILE}" RUNTIME_VERSION "${RUNTIME_VERSION}"
+update_key_value_file "${ENV_FILE}" RUNTIME_ASSET_NAME "${RUNTIME_ASSET_NAME}"
+update_key_value_file "${ENV_FILE}" RUNTIME_RELEASE_TAG "${RUNTIME_RELEASE_TAG}"
 
 printf '%s\n' "restarting remnanode"
 rc-service remnanode restart

@@ -3,8 +3,10 @@
 set -eu
 
 REPO_SLUG="${1:-${REPO_SLUG:-x-socks/remnanode-lite}}"
+RUNTIME_VERSION_INPUT="${2:-${RUNTIME_VERSION:-}}"
 BASE_DIR="${BASE_DIR:-/opt/remnanode}"
-RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-remnanode-runtime-latest.tar.gz}"
+RUNTIME_ASSET_NAME="${RUNTIME_ASSET_NAME:-}"
+RUNTIME_RELEASE_TAG="${RUNTIME_RELEASE_TAG:-}"
 NODE_PORT="${NODE_PORT:-}"
 SECRET_INPUT="${SECRET_INPUT:-${SECRET_KEY:-}}"
 INTERNAL_REST_TOKEN="${INTERNAL_REST_TOKEN:-}"
@@ -66,13 +68,38 @@ prompt_required() {
     done
 }
 
+prompt_with_default() {
+    prompt_text="$1"
+    current_value="$2"
+    default_value="$3"
+
+    if [ -n "${current_value}" ]; then
+        printf '%s\n' "${current_value}"
+        return 0
+    fi
+
+    if [ ! -t 0 ]; then
+        printf '%s\n' "${default_value}"
+        return 0
+    fi
+
+    printf '%s' "${prompt_text}" >&2
+    IFS= read -r input_value || true
+    if [ -n "${input_value}" ]; then
+        printf '%s\n' "${input_value}"
+        return 0
+    fi
+
+    printf '%s\n' "${default_value}"
+}
+
 print_intro() {
     cat >&2 <<'EOF'
 Remnanode one-click install
 
 This installer will:
 - install or verify Node.js 24, supervisor, gcompat, unzip, tar, and Xray
-- download the latest runtime bundle from GitHub Releases
+- download the selected runtime bundle from GitHub Releases
 - install the bare-metal layout under /opt/remnanode
 - write the local OpenRC, supervisord, and env files directly on the host
 - keep Xray under a minimal supervisor control plane for upstream compatibility
@@ -80,6 +107,7 @@ This installer will:
 - enable and start the OpenRC remnanode service
 
 You will be prompted for:
+- RUNTIME_VERSION: press Enter for the latest runtime, or enter a specific upstream version
 - NODE_PORT: the Node Port configured in the Remnawave panel
 - SECRET_KEY: the full secret payload from the panel
 
@@ -100,6 +128,99 @@ normalize_secret_key() {
             printf '%s\n' "${input_value}"
             ;;
     esac
+}
+
+normalize_runtime_version() {
+    case "$1" in
+        ""|latest|LATEST)
+            printf '%s\n' latest
+            ;;
+        v[0-9]*)
+            printf '%s\n' "${1#v}"
+            ;;
+        *)
+            printf '%s\n' "$1"
+            ;;
+    esac
+}
+
+infer_runtime_version_from_asset_name() {
+    case "$1" in
+        remnanode-runtime-latest.tar.gz)
+            printf '%s\n' latest
+            ;;
+        remnanode-runtime-*.tar.gz)
+            asset_version="${1#remnanode-runtime-}"
+            printf '%s\n' "${asset_version%.tar.gz}"
+            ;;
+        *)
+            printf '%s\n' ""
+            ;;
+    esac
+}
+
+resolve_runtime_version() {
+    version_input="$1"
+    asset_name="$2"
+
+    if [ -n "${version_input}" ]; then
+        normalize_runtime_version "${version_input}"
+        return 0
+    fi
+
+    inferred_version="$(infer_runtime_version_from_asset_name "${asset_name}")"
+    if [ -n "${inferred_version}" ]; then
+        normalize_runtime_version "${inferred_version}"
+        return 0
+    fi
+
+    printf '%s\n' latest
+}
+
+resolve_runtime_asset_name() {
+    runtime_version="$1"
+    configured_asset_name="$2"
+    version_input="$3"
+
+    if [ -n "${configured_asset_name}" ] && [ -z "${version_input}" ]; then
+        printf '%s\n' "${configured_asset_name}"
+        return 0
+    fi
+
+    if [ "${runtime_version}" = "latest" ]; then
+        printf '%s\n' remnanode-runtime-latest.tar.gz
+    else
+        printf 'remnanode-runtime-%s.tar.gz\n' "${runtime_version}"
+    fi
+}
+
+resolve_runtime_release_tag() {
+    runtime_version="$1"
+    configured_release_tag="$2"
+
+    if [ -n "${configured_release_tag}" ]; then
+        printf '%s\n' "${configured_release_tag}"
+        return 0
+    fi
+
+    if [ "${runtime_version}" = "latest" ]; then
+        printf '%s\n' ""
+    else
+        printf 'runtime-%s\n' "${runtime_version}"
+    fi
+}
+
+build_runtime_download_url() {
+    repo_slug="$1"
+    runtime_version="$2"
+    asset_name="$3"
+    release_tag="$4"
+
+    if [ "${runtime_version}" = "latest" ]; then
+        printf 'https://github.com/%s/releases/latest/download/%s\n' "${repo_slug}" "${asset_name}"
+    else
+        printf 'https://github.com/%s/releases/download/%s/%s\n' "${repo_slug}" "${release_tag}" "${asset_name}"
+    fi
 }
 
 generate_random() {
@@ -313,9 +434,9 @@ EOF
 
     if [ ! -f /etc/remnanode/github-release.env ]; then
         cat > /etc/remnanode/github-release.env <<'EOF'
-# Pull-based updates from the latest GitHub release.
+# Pull-based updates from GitHub releases.
 REPO_SLUG=owner/repo
-RUNTIME_ASSET_NAME=remnanode-runtime-latest.tar.gz
+RUNTIME_VERSION=latest
 BASE_DIR=/opt/remnanode
 EOF
     fi
@@ -715,6 +836,10 @@ require_node_24
 install_xray
 
 print_intro
+RUNTIME_VERSION="$(prompt_with_default 'RUNTIME_VERSION [latest]: ' "${RUNTIME_VERSION_INPUT}" latest)"
+RUNTIME_VERSION="$(resolve_runtime_version "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}")"
+RUNTIME_ASSET_NAME="$(resolve_runtime_asset_name "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}" "${RUNTIME_VERSION_INPUT}")"
+RUNTIME_RELEASE_TAG="$(resolve_runtime_release_tag "${RUNTIME_VERSION}" "${RUNTIME_RELEASE_TAG}")"
 NODE_PORT="$(prompt_required 'NODE_PORT (Node Port from panel): ' "${NODE_PORT}")"
 SECRET_INPUT="$(prompt_required 'SECRET_KEY value or full line from panel: ' "${SECRET_INPUT}")"
 SECRET_KEY="$(normalize_secret_key "${SECRET_INPUT}")"
@@ -735,7 +860,7 @@ install_xray_example_config
 install_supervisord_config
 install_remnanode_start
 
-runtime_url="https://github.com/${REPO_SLUG}/releases/latest/download/${RUNTIME_ASSET_NAME}"
+runtime_url="$(build_runtime_download_url "${REPO_SLUG}" "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}" "${RUNTIME_RELEASE_TAG}")"
 runtime_bundle="${WORK_DIR}/${RUNTIME_ASSET_NAME}"
 download_file "${runtime_url}" "${runtime_bundle}"
 install_runtime_bundle "${runtime_bundle}"
@@ -767,7 +892,9 @@ update_key_value_file /etc/remnanode/remnanode.env NODE_OPTIONS "--max-http-head
 update_key_value_file /etc/remnanode/remnanode.env MALLOC_ARENA_MAX 1
 update_key_value_file /etc/remnanode/remnanode.env UV_THREADPOOL_SIZE 1
 update_key_value_file /etc/remnanode/github-release.env REPO_SLUG "${REPO_SLUG}"
+update_key_value_file /etc/remnanode/github-release.env RUNTIME_VERSION "${RUNTIME_VERSION}"
 update_key_value_file /etc/remnanode/github-release.env RUNTIME_ASSET_NAME "${RUNTIME_ASSET_NAME}"
+update_key_value_file /etc/remnanode/github-release.env RUNTIME_RELEASE_TAG "${RUNTIME_RELEASE_TAG}"
 update_key_value_file /etc/remnanode/github-release.env BASE_DIR "${BASE_DIR}"
 
 if [ ! -f /etc/xray/config.json ] && [ -f /etc/xray/config.json.example ]; then

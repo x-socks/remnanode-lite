@@ -17,7 +17,8 @@ Run on a machine with Docker:
 
 Default output:
 
-- `./out/remnanode-runtime-<stamp>.tar.gz`
+- `./out/remnanode-runtime-<upstream-version>.tar.gz`
+- falls back to `./out/remnanode-runtime-<stamp>.tar.gz` only when the upstream package version cannot be detected
 
 Default exported paths:
 
@@ -52,8 +53,9 @@ The workflow [`.github/workflows/runtime-bundle.yml`](../.github/workflows/runti
 - compares the upstream image digest with the latest published release
 - publishes a new release only when the digest changed
 
-Stable release asset:
+Published release assets:
 
+- `remnanode-runtime-<upstream-version>.tar.gz`
 - `remnanode-runtime-latest.tar.gz`
 
 ## VPS Install
@@ -67,7 +69,13 @@ curl -fsSL -o /root/one-click-panel.sh \
 sh /root/one-click-panel.sh install
 ```
 
-That install path pulls the latest runtime bundle from GitHub Releases and writes:
+Pin a specific upstream runtime version:
+
+```sh
+RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh install
+```
+
+That install path pulls the selected runtime bundle from GitHub Releases and writes:
 
 ```text
 /opt/remnanode/current -> /opt/remnanode/releases/<release-id>
@@ -86,7 +94,7 @@ sh /root/one-click-panel.sh update
 
 That update path:
 
-- downloads the latest release asset
+- downloads the selected release asset
 - installs it into a new release directory
 - repoints `/opt/remnanode/current`
 - restarts `remnanode`

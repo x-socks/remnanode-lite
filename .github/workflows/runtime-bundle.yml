@@ -34,9 +34,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       bundle_stamp: ${{ steps.vars.outputs.bundle_stamp }}
+      bundle_version: ${{ steps.metadata.outputs.bundle_version }}
+      runtime_version: ${{ steps.metadata.outputs.runtime_version }}
       runtime_bundle: ${{ steps.export.outputs.runtime_bundle }}
       runtime_bundle_latest: ${{ steps.aliases.outputs.runtime_bundle_latest }}
-      release_tag: ${{ steps.vars.outputs.release_tag }}
+      release_tag: ${{ steps.metadata.outputs.release_tag }}
       should_export: ${{ steps.check.outputs.should_export }}
       image_ref: ${{ steps.settings.outputs.image_ref }}
       image_digest: ${{ steps.image.outputs.image_digest }}
@@ -49,9 +51,7 @@ jobs:
           set -eu
           short_sha=$(printf '%s' "${GITHUB_SHA}" | cut -c1-12)
           bundle_stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
-          release_tag="runtime-${bundle_stamp}"
           echo "bundle_stamp=${bundle_stamp}" >> "${GITHUB_OUTPUT}"
-          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Resolve workflow settings
         id: settings
@@ -136,6 +136,25 @@ jobs:
           runtime_bundle=$(cat "${RUNNER_TEMP}/runtime-bundle-path.txt")
           echo "runtime_bundle=${runtime_bundle}" >> "${GITHUB_OUTPUT}"
 
+      - name: Inspect runtime bundle metadata
+        if: ${{ steps.check.outputs.should_export == 'true' }}
+        id: metadata
+        run: |
+          set -eu
+          runtime_bundle="${{ steps.export.outputs.runtime_bundle }}"
+          runtime_version="$(tar -xOf "${runtime_bundle}" manifest.txt | sed -n 's/^runtime_version=//p' | head -n 1)"
+          bundle_version="$(tar -xOf "${runtime_bundle}" manifest.txt | sed -n 's/^bundle_version=//p' | head -n 1)"
+
+          if [ -z "${bundle_version}" ]; then
+            echo "runtime bundle does not include bundle_version metadata" >&2
+            exit 1
+          fi
+
+          release_tag="runtime-${bundle_version}"
+          echo "runtime_version=${runtime_version}" >> "${GITHUB_OUTPUT}"
+          echo "bundle_version=${bundle_version}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+
       - name: Prepare stable release asset name
         if: ${{ steps.check.outputs.should_export == 'true' }}
         id: aliases
@@ -149,7 +168,7 @@ jobs:
         if: ${{ steps.check.outputs.should_export == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: remnanode-bundles-${{ steps.vars.outputs.bundle_stamp }}
+          name: remnanode-bundles-${{ steps.metadata.outputs.bundle_version }}
           path: |
             ${{ steps.export.outputs.runtime_bundle }}
             ${{ steps.aliases.outputs.runtime_bundle_latest }}
@@ -162,9 +181,20 @@ jobs:
         run: |
           set -eu
           release_notes="Runtime bundle exported from ${{ steps.settings.outputs.image_ref }}
+          runtime_version=${{ steps.metadata.outputs.runtime_version }}
           image_digest=${{ steps.image.outputs.image_digest }}"
-          gh release create "${{ steps.vars.outputs.release_tag }}" \
-            "${{ steps.export.outputs.runtime_bundle }}" \
-            "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
-            --title "${{ steps.vars.outputs.release_tag }}" \
-            --notes "${release_notes}"
+          if gh release view "${{ steps.metadata.outputs.release_tag }}" >/dev/null 2>&1; then
+            gh release upload "${{ steps.metadata.outputs.release_tag }}" \
+              "${{ steps.export.outputs.runtime_bundle }}" \
+              "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
+              --clobber
+            gh release edit "${{ steps.metadata.outputs.release_tag }}" \
+              --title "${{ steps.metadata.outputs.release_tag }}" \
+              --notes "${release_notes}"
+          else
+            gh release create "${{ steps.metadata.outputs.release_tag }}" \
+              "${{ steps.export.outputs.runtime_bundle }}" \
+              "${{ steps.aliases.outputs.runtime_bundle_latest }}" \
+              --title "${{ steps.metadata.outputs.release_tag }}" \
+              --notes "${release_notes}"
+          fi

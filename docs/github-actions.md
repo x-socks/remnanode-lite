@@ -10,7 +10,7 @@ The split is:
 
 1. GitHub runner pulls `remnawave/node:latest`.
 2. GitHub runner exports the runtime bundle.
-3. GitHub runner publishes `remnanode-runtime-latest.tar.gz` to GitHub Releases.
+3. GitHub runner publishes `remnanode-runtime-<upstream-version>.tar.gz` and refreshes the `remnanode-runtime-latest.tar.gz` alias on GitHub Releases.
 4. The Alpine VPS later pulls that release asset itself.
 
 The workflow is [`.github/workflows/runtime-bundle.yml`](../.github/workflows/runtime-bundle.yml).
@@ -37,10 +37,11 @@ If release creation fails with `Resource not accessible by integration`, set:
 - `Settings -> Actions -> General -> Workflow permissions`
 - `Read and write permissions`
 
-## Release Asset
+## Release Assets
 
-Stable asset name:
+Published asset names:
 
+- `remnanode-runtime-<upstream-version>.tar.gz`
 - `remnanode-runtime-latest.tar.gz`
 
 Each generated release note records:
@@ -65,7 +66,7 @@ The install path:
 
 - installs the Alpine packages it needs on the VPS
 - installs Xray locally on the VPS
-- downloads the latest runtime bundle from GitHub Releases
+- downloads the selected runtime bundle from GitHub Releases
 - prompts for `NODE_PORT`
 - prompts for `SECRET_KEY`
 - writes OpenRC and minimal supervisord config locally on the VPS
@@ -86,7 +87,7 @@ That update path:
 
 - refreshes the host-side OpenRC service files
 - refreshes the host-side supervisord config
-- downloads the latest `remnanode-runtime-latest.tar.gz`
+- downloads the selected runtime bundle, defaulting to `latest`
 - installs it into a new release directory
 - repoints `/opt/remnanode/current`
 - restarts `remnanode`

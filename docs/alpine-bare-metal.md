@@ -29,7 +29,8 @@ The installer will:
 
 - install required Alpine packages
 - install Xray if it is missing
-- download the latest runtime bundle from GitHub Releases
+- download the selected runtime bundle from GitHub Releases
+- default to `latest`, but allow pinning `RUNTIME_VERSION=<upstream-version>`
 - prompt for `NODE_PORT`
 - prompt for `SECRET_KEY`
 - write `/etc/remnanode/remnanode.env`
@@ -51,6 +52,13 @@ apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh update
+```
+
+Pin a specific runtime version during install or update:
+
+```sh
+RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh install
+RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh update
 ```
 
 ## Important Files
@@ -117,6 +125,7 @@ Expected active tree:
 - Do not run Docker on the VPS.
 - Let the VPS pull runtime bundles from GitHub Releases.
 - Let GitHub Actions only publish releases.
+- Use `RUNTIME_VERSION=latest` to track the newest export, or pin a specific upstream version when you need deterministic rollout behavior.
 - Keep file descriptor limits high.
 - On `128 MB` hosts, treat these defaults as experimental and expect little burst headroom.
 - On 256 MB hosts, raising V8 heap limits usually makes OOM behavior worse.

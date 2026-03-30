@@ -12,6 +12,7 @@ OUTPUT_DIR="${2:-./out}"
 APP_ROOT="${APP_ROOT:-}"
 INCLUDE_PATHS="${INCLUDE_PATHS:-dist node_modules package.json package-lock.json pnpm-lock.yaml npm-shrinkwrap.json prisma apps libs ecosystem.config.js .env.example}"
 BUNDLE_STAMP="${BUNDLE_STAMP:-}"
+BUNDLE_VERSION="${BUNDLE_VERSION:-}"
 BUNDLE_NAME="${BUNDLE_NAME:-}"
 BUNDLE_PATH_FILE="${BUNDLE_PATH_FILE:-}"
 IMAGE_DIGEST="${IMAGE_DIGEST:-}"
@@ -41,6 +42,18 @@ detect_app_root() {
     done
 
     return 1
+}
+
+extract_package_version() {
+    package_json_path="$1"
+
+    sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${package_json_path}" | head -n 1
+}
+
+sanitize_bundle_version() {
+    version_value="$1"
+
+    printf '%s' "${version_value}" | tr '/:@ ' '----' | tr -cd 'A-Za-z0-9._-'
 }
 
 copy_path_if_present() {
@@ -81,6 +94,14 @@ APP_ROOT=$(detect_app_root "${CONTAINER_ID}" "${WORK_DIR}") || {
     exit 1
 }
 
+if [ -z "${BUNDLE_VERSION}" ]; then
+    package_json_probe="${WORK_DIR}/package.json"
+    rm -f "${package_json_probe}"
+    if docker cp "${CONTAINER_ID}:${APP_ROOT}/package.json" "${package_json_probe}" >/dev/null 2>&1; then
+        BUNDLE_VERSION="$(extract_package_version "${package_json_probe}")"
+    fi
+fi
+
 STAGE_DIR="${WORK_DIR}/stage"
 RUNTIME_DIR="${STAGE_DIR}/runtime"
 mkdir -p "${RUNTIME_DIR}"
@@ -96,8 +117,14 @@ if [ -z "${STAMP}" ]; then
     STAMP="$(date +%Y%m%d-%H%M%S)-$$"
 fi
 
+SAFE_BUNDLE_VERSION="$(sanitize_bundle_version "${BUNDLE_VERSION}")"
+
 if [ -z "${BUNDLE_NAME}" ]; then
-    BUNDLE_NAME="remnanode-runtime-${STAMP}.tar.gz"
+    if [ -n "${SAFE_BUNDLE_VERSION}" ]; then
+        BUNDLE_NAME="remnanode-runtime-${SAFE_BUNDLE_VERSION}.tar.gz"
+    else
+        BUNDLE_NAME="remnanode-runtime-${STAMP}.tar.gz"
+    fi
 fi
 
 cat > "${STAGE_DIR}/manifest.txt" <<EOF
@@ -105,6 +132,8 @@ image=${IMAGE_REF}
 image_digest=${IMAGE_DIGEST}
 app_root=${APP_ROOT}
 created_at=${STAMP}
+runtime_version=${BUNDLE_VERSION}
+bundle_version=${SAFE_BUNDLE_VERSION}
 include_paths=${INCLUDE_PATHS}
 EOF
 
