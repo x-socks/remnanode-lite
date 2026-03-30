@@ -15,16 +15,17 @@ flowchart TB
     F --> H["update"]
 
     G --> I["从 GitHub Release 下载 runtime"]
-    G --> J["写 OpenRC / xray sidecar / env"]
+    G --> J["写 OpenRC / supervisord / env"]
 
     H --> I
 
     E --> I
     I --> K["/opt/remnanode/releases/..."]
     K --> L["/opt/remnanode/current"]
-    L --> M["OpenRC services"]
-    M --> N["remnanode-start -> Node.js 24"]
-    M --> O["remnanode-xray-start -> rw-core / xray"]
+    L --> M["remnanode-start"]
+    M --> N["先拉起 minimal supervisord"]
+    N --> O["Node.js 24 运行 Remnanode"]
+    N --> P["supervisord 管理 rw-core / xray"]
 ```
 
 The current repository is designed to match the new architecture:
@@ -33,7 +34,7 @@ The current repository is designed to match the new architecture:
 - the runner only exports and publishes the upstream Remnanode runtime bundle
 - the runner does not SSH into the VPS
 - the VPS pulls `remnanode-runtime-latest.tar.gz` from GitHub Releases by itself
-- `install` writes host-local OpenRC, xray sidecar, and env files
+- `install` writes host-local OpenRC, supervisord, and env files
 - `update` refreshes host-side service files, pulls a newer runtime, switches the active release, and restarts the services
 
 ## Quick Start
@@ -75,7 +76,8 @@ Validated target state:
 - NAT networking with only a small high-port window available
 - Node.js `24.x`
 - Xray installed locally as `/usr/local/bin/xray` and `/usr/local/bin/rw-core`
-- OpenRC `remnanode` and `remnanode-xray` services running as `root:root`
+- OpenRC `remnanode` service running as `root:root`
+- `supervisord` present on the host as a compatibility control plane
 
 Current required runtime variables:
 
@@ -97,7 +99,7 @@ Current practice matches the target architecture:
 
 - [`.github/workflows/runtime-bundle.yml`](.github/workflows/runtime-bundle.yml) only exports and publishes release assets
 - [`scripts/one-click-panel.sh`](scripts/one-click-panel.sh) only chooses `install` or `update` and downloads the matching host-side script
-- [`scripts/one-click-deploy.sh`](scripts/one-click-deploy.sh) installs host dependencies, writes local OpenRC and xray sidecar config, downloads runtime from GitHub Releases, and starts the services
+- [`scripts/one-click-deploy.sh`](scripts/one-click-deploy.sh) installs host dependencies, writes local OpenRC and minimal supervisord config, downloads runtime from GitHub Releases, and starts the service
 - [`scripts/one-click-upgrade.sh`](scripts/one-click-upgrade.sh) refreshes host-side service files, downloads the latest runtime from GitHub Releases, installs it into a new release directory, switches `current`, and restarts `remnanode`
 
 One minor implementation detail:

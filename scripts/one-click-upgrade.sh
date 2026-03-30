@@ -66,6 +66,12 @@ generate_random() {
     tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c "${length}"
 }
 
+ensure_apk_prereqs() {
+    if command -v apk >/dev/null 2>&1; then
+        apk add --no-cache --upgrade supervisor >/dev/null
+    fi
+}
+
 shell_quote() {
     printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
@@ -95,6 +101,7 @@ ensure_layout() {
     mkdir -p /usr/local/bin
     mkdir -p /usr/local/share/xray
     mkdir -p /var/log/remnanode
+    mkdir -p /var/log/supervisor
     mkdir -p /etc/conf.d
     mkdir -p /etc/init.d
     mkdir -p "${BASE_DIR}/releases"
@@ -129,6 +136,7 @@ start_pre() {
     checkpath -d -m 0755 -o "${command_user}" /var/log/remnanode
     checkpath -f -m 0644 -o "${command_user}" "${output_log}"
     checkpath -f -m 0644 -o "${command_user}" "${error_log}"
+    checkpath -d -m 0755 -o "${command_user}" /var/log/supervisor
 
     if [ ! -x "${command}" ]; then
         eerror "Missing executable: ${command}"
@@ -139,18 +147,6 @@ start_pre() {
         eerror "Missing application directory: ${directory}"
         return 1
     fi
-}
-
-start_post() {
-    if rc-service remnanode-xray status >/dev/null 2>&1; then
-        rc-service remnanode-xray restart >/dev/null 2>&1 || return 1
-    else
-        rc-service remnanode-xray start >/dev/null 2>&1 || return 1
-    fi
-}
-
-stop_pre() {
-    rc-service remnanode-xray stop >/dev/null 2>&1 || true
 }
 EOF
     chmod 755 /etc/init.d/remnanode
@@ -169,97 +165,53 @@ EOF
     chmod 644 /etc/conf.d/remnanode
 }
 
-install_remnanode_xray_service() {
-    cat > /etc/init.d/remnanode-xray <<'EOF'
-#!/sbin/openrc-run
+install_supervisord_config() {
+    cat > /etc/supervisord.conf <<'EOF'
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisor/supervisord.log
+pidfile=%(ENV_SUPERVISORD_PID_PATH)s
+childlogdir=/var/log/supervisor
+logfile_maxbytes=1MB
+logfile_backups=0
+loglevel=warn
+silent=true
 
-description="Remnanode Xray sidecar"
+[unix_http_server]
+file=%(ENV_SUPERVISORD_SOCKET_PATH)s
+username=%(ENV_SUPERVISORD_USER)s
+password=%(ENV_SUPERVISORD_PASSWORD)s
 
-: "${command:=/usr/local/bin/remnanode-xray-start}"
-: "${command_user:=root:root}"
-: "${pidfile:=/run/remnanode-xray.pid}"
-: "${output_log:=/var/log/remnanode/xray.log}"
-: "${error_log:=/var/log/remnanode/xray.err}"
-: "${respawn_delay:=5}"
-: "${respawn_max:=0}"
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
 
-supervisor=supervise-daemon
-command_background=true
+[supervisorctl]
+serverurl=unix://%(ENV_SUPERVISORD_SOCKET_PATH)s
+username=%(ENV_SUPERVISORD_USER)s
+password=%(ENV_SUPERVISORD_PASSWORD)s
 
-depend() {
-    need remnanode
-    after remnanode
-    use dns logger
+[program:xray]
+command=/usr/local/bin/rw-core -config http+unix://%(ENV_INTERNAL_SOCKET_PATH)s/internal/get-config?token=%(ENV_INTERNAL_REST_TOKEN)s -format json
+autostart=false
+autorestart=false
+stderr_logfile=/var/log/remnanode/xray.err
+stdout_logfile=/var/log/remnanode/xray.log
+stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB
+stdout_logfile_backups=0
+stderr_logfile_backups=0
+EOF
+    chmod 644 /etc/supervisord.conf
 }
 
-start_pre() {
-    checkpath -d -m 0755 -o "${command_user}" /var/log/remnanode
-    checkpath -f -m 0644 -o "${command_user}" "${output_log}"
-    checkpath -f -m 0644 -o "${command_user}" "${error_log}"
-
-    if [ ! -x "${command}" ]; then
-        eerror "Missing executable: ${command}"
-        return 1
-    fi
-}
-EOF
-    chmod 755 /etc/init.d/remnanode-xray
-
-    cat > /etc/conf.d/remnanode-xray <<'EOF'
-# OpenRC service configuration for the Remnanode Xray sidecar
-command=/usr/local/bin/remnanode-xray-start
-command_user=root:root
-pidfile=/run/remnanode-xray.pid
-output_log=/var/log/remnanode/xray.log
-error_log=/var/log/remnanode/xray.err
-respawn_delay=5
-respawn_max=0
-EOF
-    chmod 644 /etc/conf.d/remnanode-xray
-}
-
-install_remnanode_xray_start() {
-    cat > /usr/local/bin/remnanode-xray-start <<'EOF'
-#!/bin/sh
-
-set -eu
-
-ENV_FILE="${REMNANODE_ENV_FILE:-/etc/remnanode/remnanode.env}"
-
-if [ -f "${ENV_FILE}" ]; then
-    set -a
-    . "${ENV_FILE}"
-    set +a
-fi
-
-XRAY_BIN="${XRAY_SIDELOAD_BIN:-/usr/local/bin/rw-core}"
-
-: "${INTERNAL_REST_TOKEN:?INTERNAL_REST_TOKEN is required}"
-: "${INTERNAL_SOCKET_PATH:=/run/remnanode-internal.sock}"
-: "${XRAY_START_TIMEOUT:=20}"
-
-if [ ! -x "${XRAY_BIN}" ]; then
-    echo "remnanode-xray-start: missing binary: ${XRAY_BIN}" >&2
-    exit 1
-fi
-
-wait_seconds="${XRAY_START_TIMEOUT}"
-while [ "${wait_seconds}" -gt 0 ]; do
-    if [ -S "${INTERNAL_SOCKET_PATH}" ]; then
-        break
-    fi
-    sleep 1
-    wait_seconds=$((wait_seconds - 1))
-done
-
-if [ ! -S "${INTERNAL_SOCKET_PATH}" ]; then
-    echo "remnanode-xray-start: internal socket not ready: ${INTERNAL_SOCKET_PATH}" >&2
-    exit 1
-fi
-
-exec "${XRAY_BIN}" -config "http+unix://${INTERNAL_SOCKET_PATH}/internal/get-config?token=${INTERNAL_REST_TOKEN}" -format json
-EOF
-    chmod 755 /usr/local/bin/remnanode-xray-start
+cleanup_legacy_xray_sidecar() {
+    rc-service remnanode-xray stop >/dev/null 2>&1 || true
+    rc-update del remnanode-xray default >/dev/null 2>&1 || true
+    rm -f /etc/init.d/remnanode-xray
+    rm -f /etc/conf.d/remnanode-xray
+    rm -f /usr/local/bin/remnanode-xray-start
+    rm -f /run/remnanode-xray.pid
 }
 
 install_remnanode_start() {
@@ -284,11 +236,16 @@ NOFILE_LIMIT="${REMNANODE_ULIMIT_NOFILE:-65535}"
 : "${NODE_PORT:?NODE_PORT is required}"
 : "${SECRET_KEY:?SECRET_KEY is required}"
 : "${INTERNAL_REST_TOKEN:?INTERNAL_REST_TOKEN is required}"
+: "${SUPERVISORD_USER:?SUPERVISORD_USER is required}"
+: "${SUPERVISORD_PASSWORD:?SUPERVISORD_PASSWORD is required}"
 : "${XTLS_API_PORT:=61000}"
 INTERNAL_SOCKET_PATH="${INTERNAL_SOCKET_PATH:-/run/remnanode-internal.sock}"
+SUPERVISORD_SOCKET_PATH="${SUPERVISORD_SOCKET_PATH:-/run/supervisord.sock}"
+SUPERVISORD_PID_PATH="${SUPERVISORD_PID_PATH:-/run/supervisord.pid}"
 
 export NODE_PORT SECRET_KEY XTLS_API_PORT
 export INTERNAL_REST_TOKEN INTERNAL_SOCKET_PATH
+export SUPERVISORD_USER SUPERVISORD_PASSWORD SUPERVISORD_SOCKET_PATH SUPERVISORD_PID_PATH
 
 if [ ! -d "${APP_DIR}" ]; then
     echo "remnanode-start: missing app dir: ${APP_DIR}" >&2
@@ -328,10 +285,27 @@ cleanup_stale_node_processes() {
 }
 
 cleanup_stale_node_processes
-rm -f "${INTERNAL_SOCKET_PATH}" 2>/dev/null || true
+rm -f "${INTERNAL_SOCKET_PATH}" "${SUPERVISORD_SOCKET_PATH}" "${SUPERVISORD_PID_PATH}" 2>/dev/null || true
 pkill -x supervisord 2>/dev/null || true
 pkill -x xray 2>/dev/null || true
 pkill -x rw-core 2>/dev/null || true
+
+if command -v supervisord >/dev/null 2>&1; then
+    supervisord -c /etc/supervisord.conf &
+    wait_seconds="${SUPERVISORD_START_TIMEOUT:-10}"
+    while [ "${wait_seconds}" -gt 0 ]; do
+        if [ -S "${SUPERVISORD_SOCKET_PATH}" ]; then
+            break
+        fi
+        sleep 1
+        wait_seconds=$((wait_seconds - 1))
+    done
+
+    if [ ! -S "${SUPERVISORD_SOCKET_PATH}" ]; then
+        echo "remnanode-start: supervisord socket not ready: ${SUPERVISORD_SOCKET_PATH}" >&2
+        exit 1
+    fi
+fi
 
 cd "${APP_DIR}"
 exec "${NODE_BIN}" "${MAIN_FILE}"
@@ -343,10 +317,11 @@ refresh_host_runtime() {
     current_node_options="${NODE_OPTIONS:-}"
     current_malloc_arena_max="${MALLOC_ARENA_MAX:-}"
 
+    ensure_apk_prereqs
     ensure_layout
+    cleanup_legacy_xray_sidecar
     install_remnanode_service
-    install_remnanode_xray_service
-    install_remnanode_xray_start
+    install_supervisord_config
     install_remnanode_start
 
     if [ -z "${INTERNAL_REST_TOKEN}" ]; then
@@ -455,6 +430,7 @@ require_cmd date
 require_cmd cp
 require_cmd mv
 require_cmd ln
+require_cmd rc-update
 require_cmd rc-service
 
 WORK_ROOT="${HOME:-/root}/.remnanode-work"
@@ -485,12 +461,14 @@ sleep 3
 
 printf '%s\n' "===== service status ====="
 rc-service remnanode status || true
-printf '%s\n' "===== xray service status ====="
-rc-service remnanode-xray status || true
+printf '%s\n' "===== /etc/supervisord.conf ====="
+cat /etc/supervisord.conf || true
 printf '%s\n' "===== /var/log/remnanode/remnanode.log ====="
 tail -n 40 /var/log/remnanode/remnanode.log || true
 printf '%s\n' "===== /var/log/remnanode/remnanode.err ====="
 tail -n 40 /var/log/remnanode/remnanode.err || true
+printf '%s\n' "===== /var/log/supervisor/supervisord.log ====="
+tail -n 40 /var/log/supervisor/supervisord.log || true
 printf '%s\n' "===== /var/log/remnanode/xray.log ====="
 tail -n 40 /var/log/remnanode/xray.log || true
 printf '%s\n' "===== /var/log/remnanode/xray.err ====="

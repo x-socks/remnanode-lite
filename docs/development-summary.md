@@ -21,9 +21,9 @@
 3. Runner 发布 `remnanode-runtime-latest.tar.gz` 到 GitHub Releases
 4. VPS 通过 `one-click-panel.sh` 选择 `install` 或 `update`
 5. VPS 自己下载 runtime bundle
-6. VPS 本地写入 OpenRC、xray sidecar、env 配置
+6. VPS 本地写入 OpenRC、supervisord、env 配置
 7. VPS 本地启动 `remnanode-start`
-8. Remnanode 以 Node.js 原生进程运行，并由 OpenRC 直接管理 Xray
+8. Remnanode 以 Node.js 原生进程运行，并通过最小 `supervisord` 兼容层管理 Xray
 
 这意味着：
 
@@ -62,11 +62,10 @@
 安装脚本已内联写入：
 
 - OpenRC service
-- `remnanode-xray` OpenRC service
+- `supervisord.conf`
 - `/etc/remnanode/remnanode.env`
 - `/etc/remnanode/github-release.env`
 - `/usr/local/bin/remnanode-start`
-- `/usr/local/bin/remnanode-xray-start`
 
 这意味着 release 资产只包含官方 runtime，不再夹带 host-tools。
 
@@ -92,8 +91,8 @@
 - Node 版本必须与当前官方 runtime 匹配，最终以 `24.x` 为准
 - `NODE_OPTIONS` 需要正确 quoting，避免 shell 误解析
 - `/etc/remnanode` 及 env 文件权限需要允许服务进程读取
-- 为了逼近 `128 MB`，已移除 `supervisord`，改为 OpenRC 直管 `remnanode` 与 `remnanode-xray`
-- 启动前需要清理 stale unix socket、旧 Node 进程和遗留的 `supervisord`/`xray` 进程
+- 由于上游 runtime 仍硬依赖 supervisor 控制面，当前改回最小 `supervisord` 兼容模式
+- 启动前需要清理 stale unix socket、旧 Node 进程和旧 `supervisord`/`xray` 进程
 - `128 MB` 当前只应视为实验性下限，`256 MB` 仍是更稳妥的基线
 
 ## 当前仓库状态

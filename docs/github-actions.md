@@ -68,7 +68,7 @@ The install path:
 - downloads the latest runtime bundle from GitHub Releases
 - prompts for `NODE_PORT`
 - prompts for `SECRET_KEY`
-- writes OpenRC config locally on the VPS for both `remnanode` and `remnanode-xray`
+- writes OpenRC and minimal supervisord config locally on the VPS
 - starts `remnanode`
 
 ## Later Upgrades On The VPS
@@ -85,10 +85,11 @@ sh /root/one-click-panel.sh update
 That update path:
 
 - refreshes the host-side OpenRC service files
+- refreshes the host-side supervisord config
 - downloads the latest `remnanode-runtime-latest.tar.gz`
 - installs it into a new release directory
 - repoints `/opt/remnanode/current`
-- restarts `remnanode` and the local xray sidecar
+- restarts `remnanode`
 
 ## Terminology
 

@@ -7,6 +7,7 @@ Validated host state:
 - Alpine `3.23.x`
 - OpenRC
 - Node.js `24.x`
+- `supervisord`
 - local Xray binary at `/usr/local/bin/xray`
 - `/usr/local/bin/rw-core -> /usr/local/bin/xray`
 - Remnanode runtime under `/opt/remnanode/releases/...`
@@ -32,7 +33,8 @@ The installer will:
 - prompt for `NODE_PORT`
 - prompt for `SECRET_KEY`
 - write `/etc/remnanode/remnanode.env`
-- write OpenRC service files for both `remnanode` and `remnanode-xray`
+- write `/etc/supervisord.conf`
+- write OpenRC service files
 - start `remnanode`
 
 Accepted `SECRET_KEY` input:
@@ -55,12 +57,10 @@ sh /root/one-click-panel.sh update
 
 - `/etc/remnanode/remnanode.env`
 - `/etc/remnanode/github-release.env`
+- `/etc/supervisord.conf`
 - `/etc/init.d/remnanode`
-- `/etc/init.d/remnanode-xray`
 - `/etc/conf.d/remnanode`
-- `/etc/conf.d/remnanode-xray`
 - `/usr/local/bin/remnanode-start`
-- `/usr/local/bin/remnanode-xray-start`
 - `/opt/remnanode/current`
 
 ## Required Variables
@@ -95,6 +95,7 @@ Low-memory defaults:
 
 - `/var/log/remnanode/remnanode.log`
 - `/var/log/remnanode/remnanode.err`
+- `/var/log/supervisor/supervisord.log`
 - `/var/log/remnanode/xray.log`
 - `/var/log/remnanode/xray.err`
 
@@ -132,11 +133,12 @@ Expected active tree:
 - The panel secret was empty or truncated.
 - Paste the full payload from the panel.
 
-`remnanode-xray-start: internal socket not ready`
+`Supervisord socket file not found`
 
-- `remnanode` did not expose its internal unix socket in time.
+- `supervisord` did not come up cleanly.
+- Check `/var/log/supervisor/supervisord.log`.
 - Check `/var/log/remnanode/remnanode.err`.
-- Check `/var/log/remnanode/xray.err`.
+- Check `/etc/supervisord.conf`.
 
 `connect ECONNREFUSED 127.0.0.1:61000`
 
