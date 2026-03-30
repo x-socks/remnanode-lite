@@ -2,20 +2,22 @@
 
 Bare-metal Remnanode deployment for extremely constrained Alpine LXC VPS hosts.
 
+Chinese version: [README.zh-CN.md](README.zh-CN.md)
+
 ## Architecture
 
 ```mermaid
 flowchart TB
-    A["官方 remnawave/node 镜像"] --> B["GitHub Actions Runner"]
-    B --> C["导出 runtime bundle"]
+    A["Upstream remnawave/node image"] --> B["GitHub Actions runner"]
+    B --> C["Export runtime bundle"]
     C --> D["GitHub Release"]
-    D --> E["remnanode-runtime-<version>.tar.gz + latest 别名"]
+    D --> E["remnanode-runtime-<version>.tar.gz + latest alias"]
 
     F["VPS: one-click-panel.sh"] --> G["install"]
     F --> H["update"]
 
-    G --> I["从 GitHub Release 下载 runtime"]
-    G --> J["写 OpenRC / supervisord / env"]
+    G --> I["Download runtime from GitHub Releases"]
+    G --> J["Write OpenRC / supervisord / env"]
 
     H --> I
 
@@ -23,9 +25,9 @@ flowchart TB
     I --> K["/opt/remnanode/releases/..."]
     K --> L["/opt/remnanode/current"]
     L --> M["remnanode-start"]
-    M --> N["先拉起 minimal supervisord"]
-    N --> O["Node.js 24 运行 Remnanode"]
-    N --> P["supervisord 管理 rw-core / xray"]
+    M --> N["Start minimal supervisord first"]
+    N --> O["Run Remnanode on Node.js 24"]
+    N --> P["supervisord manages rw-core / xray"]
 ```
 
 The current repository is designed to match the new architecture:
@@ -75,6 +77,102 @@ curl -fsSL -o /root/one-click-panel.sh \
 sh /root/one-click-panel.sh update
 ```
 
+## Parameters
+
+The one-click scripts support both positional arguments and environment variables.
+
+### `scripts/one-click-panel.sh`
+
+Positional arguments:
+
+- `ACTION`: `auto` by default. Supported values: `auto`, `install`, `update`.
+- `REPO_SLUG`: `x-socks/remnanode-lite` by default.
+- `REPO_REF`: `main` by default.
+- `RUNTIME_VERSION`: `latest` by default.
+
+Environment variables:
+
+- `ACTION=auto`: auto-detect `install` or `update`.
+- `REPO_SLUG=x-socks/remnanode-lite`: GitHub repository used for raw script downloads and release pulls.
+- `REPO_REF=main`: Git ref used when downloading `one-click-deploy.sh` or `one-click-upgrade.sh`.
+- `RUNTIME_VERSION=latest`: runtime selector. Use `latest` for the newest published bundle, or a concrete release version such as `2.6.1` when versioned assets exist.
+- `BASE_DIR=/opt/remnanode`: install root on the VPS.
+
+### `scripts/one-click-deploy.sh`
+
+Positional arguments:
+
+- `REPO_SLUG`: `x-socks/remnanode-lite` by default.
+- `RUNTIME_VERSION`: unset by default, resolved to `latest`.
+
+Environment variables:
+
+- `REPO_SLUG=x-socks/remnanode-lite`
+- `BASE_DIR=/opt/remnanode`
+- `RUNTIME_VERSION=latest`
+- `RUNTIME_ASSET_NAME=`: auto-derived from `RUNTIME_VERSION`.
+- `RUNTIME_RELEASE_TAG=`: auto-derived from `RUNTIME_VERSION`.
+- `NODE_PORT=`: required unless entered interactively.
+- `SECRET_INPUT=`: required unless entered interactively. Accepts either the raw panel secret or `SECRET_KEY=...`.
+- `INTERNAL_REST_TOKEN=`: auto-generated if empty.
+- `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
+- `XRAY_START_TIMEOUT=20`
+- `SUPERVISORD_USER=`: auto-generated if empty.
+- `SUPERVISORD_PASSWORD=`: auto-generated if empty.
+- `SUPERVISORD_SOCKET_PATH=/run/supervisord.sock`
+- `SUPERVISORD_PID_PATH=/run/supervisord.pid`
+
+Default runtime env written by install:
+
+- `NODE_OPTIONS='--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1'`
+- `MALLOC_ARENA_MAX=1`
+- `UV_THREADPOOL_SIZE=1`
+- `REMNANODE_ULIMIT_NOFILE=65535`
+
+### `scripts/one-click-upgrade.sh`
+
+Positional arguments:
+
+- `REPO_SLUG`: `x-socks/remnanode-lite` by default.
+- `RUNTIME_VERSION`: unset by default, resolved from saved release config or `latest`.
+
+Environment variables:
+
+- `GITHUB_RELEASE_ENV_FILE=/etc/remnanode/github-release.env`
+- `REPO_SLUG=x-socks/remnanode-lite`
+- `BASE_DIR=/opt/remnanode`
+- `RUNTIME_VERSION=latest`
+- `RUNTIME_ASSET_NAME=`: auto-derived when not set.
+- `RUNTIME_RELEASE_TAG=`: auto-derived when not set.
+- `REMNANODE_ENV_FILE=/etc/remnanode/remnanode.env`
+- `INTERNAL_REST_TOKEN=`: reused from `remnanode.env`, auto-generated if missing.
+- `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
+- `XRAY_START_TIMEOUT=20`
+- `SUPERVISORD_USER=`: reused from `remnanode.env`, auto-generated if missing.
+- `SUPERVISORD_PASSWORD=`: reused from `remnanode.env`, auto-generated if missing.
+- `SUPERVISORD_SOCKET_PATH=/run/supervisord.sock`
+- `SUPERVISORD_PID_PATH=/run/supervisord.pid`
+
+### Saved host config files
+
+`/etc/remnanode/github-release.env` defaults:
+
+- `REPO_SLUG=owner/repo`
+- `RUNTIME_VERSION=latest`
+- `BASE_DIR=/opt/remnanode`
+
+`/etc/remnanode/remnanode.env` template defaults:
+
+- `REMNANODE_APP_DIR=/opt/remnanode/current`
+- `REMNANODE_ENTRYPOINT=dist/src/main.js`
+- `REMNANODE_ENV=production`
+- `NODE_PORT=20481`
+- `XTLS_API_PORT=61000`
+- `XRAY_BIN=/usr/local/bin/xray`
+- `XRAY_CONFIG=/etc/xray/config.json`
+- `XRAY_ASSET_DIR=/usr/local/share/xray`
+- `REMNANODE_ULIMIT_NOFILE=65535`
+
 ## Runtime Model
 
 Validated target state:
@@ -121,3 +219,4 @@ One minor implementation detail:
 - [docs/alpine-bare-metal.md](docs/alpine-bare-metal.md)
 - [docs/runtime-bundle-workflow.md](docs/runtime-bundle-workflow.md)
 - [docs/github-actions.md](docs/github-actions.md)
+- [README.zh-CN.md](README.zh-CN.md)
