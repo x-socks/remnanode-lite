@@ -935,20 +935,23 @@ capture_dashboard_snapshot() {
 }
 
 print_menu() {
-    printf '\n%s\n' "Installation & Management:"
+    printf '\n'
+    print_colored_title "${ANSI_GREEN}" "🛠️" "Installation & Management"
     printf '%s\n' "  1) Install remnanode-lite"
     printf '%s\n' "  2) Start node services"
     printf '%s\n' "  3) Stop node services"
     printf '%s\n' "  4) Restart node services"
     printf '%s\n' "  5) Uninstall remnanode-lite"
 
-    printf '\n%s\n' "Monitoring & Logs:"
+    printf '\n'
+    print_colored_title "${ANSI_BLUE}" "📊" "Monitoring & Logs"
     printf '%s\n' "  6) Show node status"
     printf '%s\n' "  7) View service logs"
     printf '%s\n' "  8) View Xray output logs"
     printf '%s\n' "  9) View Xray error logs"
 
-    printf '\n%s\n' "Updates & Configuration:"
+    printf '\n'
+    print_colored_title "${ANSI_CYAN}" "⚙️" "Updates & Configuration"
     printf '%s\n' " 10) Update remnanode-lite"
     printf '%s\n' " 11) Update xray-core"
     printf '%s\n' " 12) Edit configuration"

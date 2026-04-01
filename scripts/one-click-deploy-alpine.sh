@@ -328,6 +328,9 @@ ensure_layout() {
     mkdir -p /etc/conf.d
     mkdir -p /etc/init.d
     mkdir -p "${BASE_DIR}/releases"
+    : > /var/log/remnanode/xray.log
+    : > /var/log/remnanode/xray.err
+    chmod 644 /var/log/remnanode/xray.log /var/log/remnanode/xray.err 2>/dev/null || true
     chmod 700 /etc/remnanode 2>/dev/null || true
     printf '%s\n' "Installed deployment layout into /"
 }
