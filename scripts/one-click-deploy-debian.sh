@@ -537,12 +537,12 @@ EOF
 }
 
 install_supervisord_config() {
-    cat > /etc/supervisord.conf <<'EOF'
+    cat > /etc/supervisord.conf <<EOF
 [supervisord]
 nodaemon=true
 user=root
 logfile=/var/log/supervisor/supervisord.log
-pidfile=%(ENV_SUPERVISORD_PID_PATH)s
+pidfile=${SUPERVISORD_PID_PATH}
 childlogdir=/var/log/supervisor
 logfile_maxbytes=1MB
 logfile_backups=0
@@ -550,20 +550,20 @@ loglevel=warn
 silent=true
 
 [unix_http_server]
-file=%(ENV_SUPERVISORD_SOCKET_PATH)s
-username=%(ENV_SUPERVISORD_USER)s
-password=%(ENV_SUPERVISORD_PASSWORD)s
+file=${SUPERVISORD_SOCKET_PATH}
+username=${SUPERVISORD_USER}
+password=${SUPERVISORD_PASSWORD}
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl=unix://%(ENV_SUPERVISORD_SOCKET_PATH)s
-username=%(ENV_SUPERVISORD_USER)s
-password=%(ENV_SUPERVISORD_PASSWORD)s
+serverurl=unix://${SUPERVISORD_SOCKET_PATH}
+username=${SUPERVISORD_USER}
+password=${SUPERVISORD_PASSWORD}
 
 [program:xray]
-command=/usr/local/bin/rw-core -config http+unix://%(ENV_INTERNAL_SOCKET_PATH)s/internal/get-config?token=%(ENV_INTERNAL_REST_TOKEN)s -format json
+command=/usr/local/bin/rw-core -config http+unix://${INTERNAL_SOCKET_PATH}/internal/get-config?token=${INTERNAL_REST_TOKEN} -format json
 autostart=false
 autorestart=false
 stderr_logfile=/var/log/remnanode/xray.err
@@ -912,9 +912,6 @@ cleanup_legacy_xray_sidecar
 install_remnanode_service
 install_remnanode_env
 install_xray_example_config
-install_supervisord_config
-install_remnanode_start
-disable_system_supervisor_service
 
 runtime_url="$(build_runtime_download_url "${REPO_SLUG}" "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}" "${RUNTIME_RELEASE_TAG}")"
 runtime_bundle="${WORK_DIR}/${RUNTIME_ASSET_NAME}"
@@ -937,6 +934,9 @@ fi
 if [ -z "${SUPERVISORD_PASSWORD}" ]; then
     SUPERVISORD_PASSWORD="$(generate_random 64)"
 fi
+install_supervisord_config
+install_remnanode_start
+disable_system_supervisor_service
 update_key_value_file /etc/remnanode/remnanode.env INTERNAL_REST_TOKEN "${INTERNAL_REST_TOKEN}"
 update_key_value_file /etc/remnanode/remnanode.env INTERNAL_SOCKET_PATH "${INTERNAL_SOCKET_PATH}"
 update_key_value_file /etc/remnanode/remnanode.env XRAY_START_TIMEOUT "${XRAY_START_TIMEOUT}"
