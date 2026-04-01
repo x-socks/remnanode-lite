@@ -498,8 +498,17 @@ EOF
 }
 
 install_xray_example_config() {
+    xray_public_port=20482
+    case "${NODE_PORT:-}" in
+        ''|*[!0-9]*)
+            ;;
+        *)
+            xray_public_port=$((NODE_PORT + 1))
+            ;;
+    esac
+
     if [ ! -f /etc/xray/config.json.example ]; then
-        cat > /etc/xray/config.json.example <<'EOF'
+        cat > /etc/xray/config.json.example <<EOF
 {
   "log": {
     "loglevel": "warning"
@@ -508,7 +517,7 @@ install_xray_example_config() {
     {
       "tag": "vless-tcp",
       "listen": "0.0.0.0",
-      "port": 20482,
+      "port": ${xray_public_port},
       "protocol": "vless",
       "settings": {
         "clients": [],

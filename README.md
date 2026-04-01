@@ -172,6 +172,12 @@ Default runtime env written by install:
 - `UV_THREADPOOL_SIZE=1`
 - `REMNANODE_ULIMIT_NOFILE=65535`
 
+Xray config fallback:
+
+- install only copies the built-in `/etc/xray/config.json.example` to `/etc/xray/config.json` when the target file does not already exist
+- for fresh installs, the sample inbound port is generated as `NODE_PORT + 1`
+- with the default `NODE_PORT=20481`, that sample Xray inbound becomes `20482`
+
 ### `scripts/one-click-upgrade.sh`
 
 Positional arguments:

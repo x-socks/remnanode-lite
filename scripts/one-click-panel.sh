@@ -27,6 +27,13 @@ SNAPSHOT_XRAY_STATE=""
 SNAPSHOT_CPU_LOAD=""
 SNAPSHOT_MEMORY_USAGE=""
 SNAPSHOT_DISK_USAGE=""
+ANSI_BOLD=""
+ANSI_RESET=""
+ANSI_CYAN=""
+ANSI_BLUE=""
+ANSI_GREEN=""
+ANSI_YELLOW=""
+ANSI_MAGENTA=""
 
 require_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -62,6 +69,19 @@ make_temp_dir() {
 
     mkdir -p "${PANEL_WORK_ROOT}"
     mktemp -d "${PANEL_WORK_ROOT}/${prefix}.XXXXXX"
+}
+
+init_terminal_style() {
+    if [ -t 1 ] && [ "${TERM:-}" != "dumb" ]; then
+        esc="$(printf '\033')"
+        ANSI_BOLD="${esc}[1m"
+        ANSI_RESET="${esc}[0m"
+        ANSI_CYAN="${esc}[36m"
+        ANSI_BLUE="${esc}[34m"
+        ANSI_GREEN="${esc}[32m"
+        ANSI_YELLOW="${esc}[33m"
+        ANSI_MAGENTA="${esc}[35m"
+    fi
 }
 
 resolve_self_path() {
@@ -588,14 +608,60 @@ show_status_report() {
     if command_exists supervisorctl && [ -n "${supervisor_socket}" ] && [ -S "${supervisor_socket}" ]; then
         printf '\n%s\n' "Supervisor Xray Status"
         print_rule
-        if [ -n "${supervisor_user}" ] || [ -n "${supervisor_password}" ]; then
-            supervisorctl -s "unix://${supervisor_socket}" -u "${supervisor_user}" -p "${supervisor_password}" status xray 2>&1 || true
-        else
-            supervisorctl -s "unix://${supervisor_socket}" status xray 2>&1 || true
-        fi
+        run_supervisorctl_status "${supervisor_socket}" "${supervisor_user}" "${supervisor_password}" xray 2>&1 || print_xray_process_fallback
     fi
 
     press_enter
+}
+
+run_supervisorctl_status() {
+    supervisor_socket="$1"
+    supervisor_user="$2"
+    supervisor_password="$3"
+    program_name="$4"
+    work_dir="$(make_temp_dir "supervisorctl")"
+    config_path="${work_dir}/supervisorctl.conf"
+
+    cat > "${config_path}" <<EOF
+[supervisorctl]
+serverurl=unix://${supervisor_socket}
+EOF
+
+    if [ -n "${supervisor_user}" ]; then
+        printf 'username=%s\n' "${supervisor_user}" >> "${config_path}"
+    fi
+
+    if [ -n "${supervisor_password}" ]; then
+        printf 'password=%s\n' "${supervisor_password}" >> "${config_path}"
+    fi
+
+    if supervisorctl -c "${config_path}" status "${program_name}"; then
+        rm -rf "${work_dir}"
+        return 0
+    fi
+
+    rm -rf "${work_dir}"
+    return 1
+}
+
+print_xray_process_fallback() {
+    if pgrep -x xray >/dev/null 2>&1 || pgrep -x rw-core >/dev/null 2>&1; then
+        printf '%s\n' "xray RUNNING (process fallback)"
+    else
+        printf '%s\n' "xray STOPPED (process fallback)"
+    fi
+}
+
+print_colored_title() {
+    color_code="$1"
+    icon="$2"
+    title_text="$3"
+
+    if [ -n "${ANSI_BOLD}" ]; then
+        printf '%b%s %s%b\n' "${ANSI_BOLD}${color_code}" "${icon}" "${title_text}" "${ANSI_RESET}"
+    else
+        printf '%s %s\n' "${icon}" "${title_text}"
+    fi
 }
 
 resolve_local_or_remote_script() {
@@ -832,19 +898,24 @@ uninstall_remnanode() {
 }
 
 print_dashboard() {
-    printf '%s\n' "${PANEL_TITLE}"
+    print_colored_title "${ANSI_MAGENTA}" "🚀" "${PANEL_TITLE}"
     print_rule
-    printf '\n%s %s\n' "Node Status:" "${SNAPSHOT_STATUS}"
-    printf '\n%s\n' "Connection Information:"
+    printf '\n'
+    print_colored_title "${ANSI_GREEN}" "✅" "Node Status"
+    printf '  %-16s %s\n' "Current:" "${SNAPSHOT_STATUS}"
+    printf '\n'
+    print_colored_title "${ANSI_BLUE}" "🌐" "Connection Information"
     printf '  %-16s %s\n' "IP Address:" "${SNAPSHOT_IP}"
     printf '  %-16s %s\n' "Port:" "${SNAPSHOT_PORT}"
     printf '  %-16s %s\n' "Full URL:" "${SNAPSHOT_FULL_URL}"
 
-    printf '\n%s\n' "Components Status:"
+    printf '\n'
+    print_colored_title "${ANSI_CYAN}" "⚙️" "Components Status"
     printf '  %-16s %s\n' "Remnanode:" "${SNAPSHOT_RUNTIME_VERSION}"
     printf '  %-16s %s (%s)\n' "Xray Core:" "${SNAPSHOT_XRAY_VERSION}" "${SNAPSHOT_XRAY_STATE}"
 
-    printf '\n%s\n' "Resource Usage:"
+    printf '\n'
+    print_colored_title "${ANSI_YELLOW}" "💾" "Resource Usage"
     printf '  %-16s %s\n' "CPU Load:" "${SNAPSHOT_CPU_LOAD}"
     printf '  %-16s %s\n' "Memory:" "${SNAPSHOT_MEMORY_USAGE}"
     printf '  %-16s %s\n' "Disk Usage:" "${SNAPSHOT_DISK_USAGE}"
@@ -1052,6 +1123,7 @@ choose_default_action() {
 }
 
 require_root
+init_terminal_style
 load_saved_defaults
 capture_dashboard_snapshot
 

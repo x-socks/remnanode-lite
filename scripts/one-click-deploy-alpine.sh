@@ -446,8 +446,17 @@ EOF
 }
 
 install_xray_example_config() {
+    xray_public_port=20482
+    case "${NODE_PORT:-}" in
+        ''|*[!0-9]*)
+            ;;
+        *)
+            xray_public_port=$((NODE_PORT + 1))
+            ;;
+    esac
+
     if [ ! -f /etc/xray/config.json.example ]; then
-        cat > /etc/xray/config.json.example <<'EOF'
+        cat > /etc/xray/config.json.example <<EOF
 {
   "log": {
     "loglevel": "warning"
@@ -456,7 +465,7 @@ install_xray_example_config() {
     {
       "tag": "vless-tcp",
       "listen": "0.0.0.0",
-      "port": 20482,
+      "port": ${xray_public_port},
       "protocol": "vless",
       "settings": {
         "clients": [],
@@ -485,12 +494,12 @@ EOF
 }
 
 install_supervisord_config() {
-    cat > /etc/supervisord.conf <<'EOF'
+    cat > /etc/supervisord.conf <<EOF
 [supervisord]
 nodaemon=true
 user=root
 logfile=/var/log/supervisor/supervisord.log
-pidfile=%(ENV_SUPERVISORD_PID_PATH)s
+pidfile=${SUPERVISORD_PID_PATH}
 childlogdir=/var/log/supervisor
 logfile_maxbytes=1MB
 logfile_backups=0
@@ -498,20 +507,20 @@ loglevel=warn
 silent=true
 
 [unix_http_server]
-file=%(ENV_SUPERVISORD_SOCKET_PATH)s
-username=%(ENV_SUPERVISORD_USER)s
-password=%(ENV_SUPERVISORD_PASSWORD)s
+file=${SUPERVISORD_SOCKET_PATH}
+username=${SUPERVISORD_USER}
+password=${SUPERVISORD_PASSWORD}
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl=unix://%(ENV_SUPERVISORD_SOCKET_PATH)s
-username=%(ENV_SUPERVISORD_USER)s
-password=%(ENV_SUPERVISORD_PASSWORD)s
+serverurl=unix://${SUPERVISORD_SOCKET_PATH}
+username=${SUPERVISORD_USER}
+password=${SUPERVISORD_PASSWORD}
 
 [program:xray]
-command=/usr/local/bin/rw-core -config http+unix://%(ENV_INTERNAL_SOCKET_PATH)s/internal/get-config?token=%(ENV_INTERNAL_REST_TOKEN)s -format json
+command=/usr/local/bin/rw-core -config http+unix://${INTERNAL_SOCKET_PATH}/internal/get-config?token=${INTERNAL_REST_TOKEN} -format json
 autostart=false
 autorestart=false
 stderr_logfile=/var/log/remnanode/xray.err
@@ -857,7 +866,6 @@ cleanup_legacy_xray_sidecar
 install_remnanode_service
 install_remnanode_env
 install_xray_example_config
-install_supervisord_config
 install_remnanode_start
 
 runtime_url="$(build_runtime_download_url "${REPO_SLUG}" "${RUNTIME_VERSION}" "${RUNTIME_ASSET_NAME}" "${RUNTIME_RELEASE_TAG}")"
@@ -888,6 +896,7 @@ update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_USER "${SUPERVISO
 update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_PASSWORD "${SUPERVISORD_PASSWORD}"
 update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_SOCKET_PATH "${SUPERVISORD_SOCKET_PATH}"
 update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_PID_PATH "${SUPERVISORD_PID_PATH}"
+install_supervisord_config
 update_key_value_file /etc/remnanode/remnanode.env NODE_OPTIONS "--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1"
 update_key_value_file /etc/remnanode/remnanode.env MALLOC_ARENA_MAX 1
 update_key_value_file /etc/remnanode/remnanode.env UV_THREADPOOL_SIZE 1

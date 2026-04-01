@@ -286,12 +286,12 @@ EOF
 }
 
 install_supervisord_config() {
-    cat > /etc/supervisord.conf <<'EOF'
+    cat > /etc/supervisord.conf <<EOF
 [supervisord]
 nodaemon=true
 user=root
 logfile=/var/log/supervisor/supervisord.log
-pidfile=%(ENV_SUPERVISORD_PID_PATH)s
+pidfile=${SUPERVISORD_PID_PATH}
 childlogdir=/var/log/supervisor
 logfile_maxbytes=1MB
 logfile_backups=0
@@ -299,20 +299,20 @@ loglevel=warn
 silent=true
 
 [unix_http_server]
-file=%(ENV_SUPERVISORD_SOCKET_PATH)s
-username=%(ENV_SUPERVISORD_USER)s
-password=%(ENV_SUPERVISORD_PASSWORD)s
+file=${SUPERVISORD_SOCKET_PATH}
+username=${SUPERVISORD_USER}
+password=${SUPERVISORD_PASSWORD}
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl=unix://%(ENV_SUPERVISORD_SOCKET_PATH)s
-username=%(ENV_SUPERVISORD_USER)s
-password=%(ENV_SUPERVISORD_PASSWORD)s
+serverurl=unix://${SUPERVISORD_SOCKET_PATH}
+username=${SUPERVISORD_USER}
+password=${SUPERVISORD_PASSWORD}
 
 [program:xray]
-command=/usr/local/bin/rw-core -config http+unix://%(ENV_INTERNAL_SOCKET_PATH)s/internal/get-config?token=%(ENV_INTERNAL_REST_TOKEN)s -format json
+command=/usr/local/bin/rw-core -config http+unix://${INTERNAL_SOCKET_PATH}/internal/get-config?token=${INTERNAL_REST_TOKEN} -format json
 autostart=false
 autorestart=false
 stderr_logfile=/var/log/remnanode/xray.err
@@ -441,7 +441,6 @@ refresh_host_runtime() {
     ensure_layout
     cleanup_legacy_xray_sidecar
     install_remnanode_service
-    install_supervisord_config
     install_remnanode_start
 
     if [ -z "${INTERNAL_REST_TOKEN}" ]; then
@@ -461,6 +460,7 @@ refresh_host_runtime() {
     update_key_value_file "${REMNANODE_ENV_FILE}" SUPERVISORD_PASSWORD "${SUPERVISORD_PASSWORD}"
     update_key_value_file "${REMNANODE_ENV_FILE}" SUPERVISORD_SOCKET_PATH "${SUPERVISORD_SOCKET_PATH}"
     update_key_value_file "${REMNANODE_ENV_FILE}" SUPERVISORD_PID_PATH "${SUPERVISORD_PID_PATH}"
+    install_supervisord_config
 
     if [ -z "${current_node_options}" ] || [ "${current_node_options}" = "--max-http-header-size=65536 --max-old-space-size=64 --max-semi-space-size=1" ]; then
         update_key_value_file "${REMNANODE_ENV_FILE}" NODE_OPTIONS "--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1"

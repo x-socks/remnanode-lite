@@ -171,6 +171,12 @@ sh /root/one-click-panel.sh update-xray
 - `UV_THREADPOOL_SIZE=1`
 - `REMNANODE_ULIMIT_NOFILE=65535`
 
+Xray 配置兜底模板：
+
+- 安装时只有在 `/etc/xray/config.json` 不存在的情况下，才会把内置的 `/etc/xray/config.json.example` 复制过去
+- 新安装场景下，示例入站端口会按 `NODE_PORT + 1` 自动生成
+- 默认 `NODE_PORT=20481` 时，对应的示例 Xray 入站端口就是 `20482`
+
 ### `scripts/one-click-upgrade.sh`
 
 位置参数：
