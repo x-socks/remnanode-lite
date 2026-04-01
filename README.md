@@ -96,7 +96,7 @@ Environment variables:
 - `REPO_SLUG=x-socks/remnanode-lite`: GitHub repository used for raw script downloads and release pulls.
 - `REPO_REF=main`: Git ref used when downloading `one-click-deploy.sh` or `one-click-upgrade.sh`.
 - `RUNTIME_VERSION=latest`: runtime selector. Use `latest` for the newest published bundle, or a concrete release version such as `2.6.1` when versioned assets exist.
-- `BASE_DIR=/opt/remnanode`: install root on the VPS.
+- `BASE_DIR=/opt/remnanode`: current release root on the VPS. Non-default values are not fully supported because the generated service files still assume `/opt/remnanode/current`.
 
 ### `scripts/one-click-deploy.sh`
 
@@ -108,7 +108,7 @@ Positional arguments:
 Environment variables:
 
 - `REPO_SLUG=x-socks/remnanode-lite`
-- `BASE_DIR=/opt/remnanode`
+- `BASE_DIR=/opt/remnanode`: current release root. Keep the default unless you are also updating the generated service files that still point at `/opt/remnanode/current`.
 - `RUNTIME_VERSION=latest`
 - `RUNTIME_ASSET_NAME=`: auto-derived from `RUNTIME_VERSION`.
 - `RUNTIME_RELEASE_TAG=`: auto-derived from `RUNTIME_VERSION`.
@@ -116,7 +116,6 @@ Environment variables:
 - `SECRET_INPUT=`: required unless entered interactively. Accepts either the raw panel secret or `SECRET_KEY=...`.
 - `INTERNAL_REST_TOKEN=`: auto-generated if empty.
 - `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
-- `XRAY_START_TIMEOUT=20`
 - `SUPERVISORD_USER=`: auto-generated if empty.
 - `SUPERVISORD_PASSWORD=`: auto-generated if empty.
 - `SUPERVISORD_SOCKET_PATH=/run/supervisord.sock`
@@ -140,14 +139,13 @@ Environment variables:
 
 - `GITHUB_RELEASE_ENV_FILE=/etc/remnanode/github-release.env`
 - `REPO_SLUG=x-socks/remnanode-lite`
-- `BASE_DIR=/opt/remnanode`
+- `BASE_DIR=/opt/remnanode`: current release root. Keep the default unless you are also updating the generated service files that still point at `/opt/remnanode/current`.
 - `RUNTIME_VERSION=latest`
 - `RUNTIME_ASSET_NAME=`: auto-derived when not set.
 - `RUNTIME_RELEASE_TAG=`: auto-derived when not set.
 - `REMNANODE_ENV_FILE=/etc/remnanode/remnanode.env`
 - `INTERNAL_REST_TOKEN=`: reused from `remnanode.env`, auto-generated if missing.
 - `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
-- `XRAY_START_TIMEOUT=20`
 - `SUPERVISORD_USER=`: reused from `remnanode.env`, auto-generated if missing.
 - `SUPERVISORD_PASSWORD=`: reused from `remnanode.env`, auto-generated if missing.
 - `SUPERVISORD_SOCKET_PATH=/run/supervisord.sock`
@@ -172,6 +170,8 @@ Environment variables:
 - `XRAY_CONFIG=/etc/xray/config.json`
 - `XRAY_ASSET_DIR=/usr/local/share/xray`
 - `REMNANODE_ULIMIT_NOFILE=65535`
+
+`BASE_DIR` only changes where release bundles are stored. The generated OpenRC service and `REMNANODE_APP_DIR` still target `/opt/remnanode/current`.
 
 ## Runtime Model
 

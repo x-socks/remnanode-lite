@@ -95,7 +95,7 @@ sh /root/one-click-panel.sh update
 - `REPO_SLUG=x-socks/remnanode-lite`：用于下载 raw 脚本和 GitHub Release 资产的仓库
 - `REPO_REF=main`：下载 `one-click-deploy.sh` / `one-click-upgrade.sh` 时使用的 Git ref
 - `RUNTIME_VERSION=latest`：runtime 选择器。`latest` 表示最新发布版本；如果已有版本化资产，也可以填具体版本如 `2.6.1`
-- `BASE_DIR=/opt/remnanode`：宿主机安装根目录
+- `BASE_DIR=/opt/remnanode`：当前 release 根目录。暂不完整支持非默认值，因为生成出来的服务文件仍固定使用 `/opt/remnanode/current`
 
 ### `scripts/one-click-deploy.sh`
 
@@ -107,7 +107,7 @@ sh /root/one-click-panel.sh update
 环境变量：
 
 - `REPO_SLUG=x-socks/remnanode-lite`
-- `BASE_DIR=/opt/remnanode`
+- `BASE_DIR=/opt/remnanode`：当前 release 根目录。除非你会同步修改仍指向 `/opt/remnanode/current` 的服务文件，否则应保持默认值
 - `RUNTIME_VERSION=latest`
 - `RUNTIME_ASSET_NAME=`：默认按 `RUNTIME_VERSION` 自动推导
 - `RUNTIME_RELEASE_TAG=`：默认按 `RUNTIME_VERSION` 自动推导
@@ -115,7 +115,6 @@ sh /root/one-click-panel.sh update
 - `SECRET_INPUT=`：必填，除非交互输入。支持原始 secret 或 `SECRET_KEY=...`
 - `INTERNAL_REST_TOKEN=`：为空时自动生成
 - `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
-- `XRAY_START_TIMEOUT=20`
 - `SUPERVISORD_USER=`：为空时自动生成
 - `SUPERVISORD_PASSWORD=`：为空时自动生成
 - `SUPERVISORD_SOCKET_PATH=/run/supervisord.sock`
@@ -139,14 +138,13 @@ sh /root/one-click-panel.sh update
 
 - `GITHUB_RELEASE_ENV_FILE=/etc/remnanode/github-release.env`
 - `REPO_SLUG=x-socks/remnanode-lite`
-- `BASE_DIR=/opt/remnanode`
+- `BASE_DIR=/opt/remnanode`：当前 release 根目录。除非你会同步修改仍指向 `/opt/remnanode/current` 的服务文件，否则应保持默认值
 - `RUNTIME_VERSION=latest`
 - `RUNTIME_ASSET_NAME=`：未设置时自动推导
 - `RUNTIME_RELEASE_TAG=`：未设置时自动推导
 - `REMNANODE_ENV_FILE=/etc/remnanode/remnanode.env`
 - `INTERNAL_REST_TOKEN=`：默认复用 `remnanode.env` 中已有值，缺失时自动生成
 - `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
-- `XRAY_START_TIMEOUT=20`
 - `SUPERVISORD_USER=`：默认复用 `remnanode.env` 中已有值，缺失时自动生成
 - `SUPERVISORD_PASSWORD=`：默认复用 `remnanode.env` 中已有值，缺失时自动生成
 - `SUPERVISORD_SOCKET_PATH=/run/supervisord.sock`
@@ -171,6 +169,8 @@ sh /root/one-click-panel.sh update
 - `XRAY_CONFIG=/etc/xray/config.json`
 - `XRAY_ASSET_DIR=/usr/local/share/xray`
 - `REMNANODE_ULIMIT_NOFILE=65535`
+
+`BASE_DIR` 只会改变 release bundle 的存放位置；生成出来的 OpenRC 服务和 `REMNANODE_APP_DIR` 仍然固定指向 `/opt/remnanode/current`。
 
 ## 运行模型
 

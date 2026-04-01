@@ -86,7 +86,6 @@ Also used by the current host layout:
 - `XRAY_ASSET_DIR=/usr/local/share/xray`
 - `INTERNAL_REST_TOKEN=<stable local token>`
 - `INTERNAL_SOCKET_PATH=/run/remnanode-internal.sock`
-- `XRAY_START_TIMEOUT=20`
 - `SUPERVISORD_USER=<compat username>`
 - `SUPERVISORD_PASSWORD=<compat password>`
 - `SUPERVISORD_SOCKET_PATH=/run/supervisord.sock`
