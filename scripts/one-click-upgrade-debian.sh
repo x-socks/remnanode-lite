@@ -197,6 +197,23 @@ ensure_apt_prereqs() {
     apt-get install -y --no-install-recommends ca-certificates curl tar unzip xz-utils supervisor procps
 }
 
+ensure_supervisord_cmd() {
+    if command -v supervisord >/dev/null 2>&1; then
+        return 0
+    fi
+
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends supervisor
+
+    if command -v supervisord >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "supervisor package installed but supervisord is still missing from PATH" >&2
+    exit 1
+}
+
 install_node_24() {
     node_version="$(node -v 2>/dev/null || true)"
     node_major="$(printf '%s' "${node_version}" | sed 's/^v//' | cut -d. -f1)"
@@ -541,6 +558,7 @@ refresh_host_runtime() {
     current_malloc_arena_max="${MALLOC_ARENA_MAX:-}"
 
     ensure_apt_prereqs
+    ensure_supervisord_cmd
     install_node_24
     install_xray
     ensure_layout
@@ -689,6 +707,7 @@ download_file "${runtime_url}" "${runtime_bundle}"
 
 refresh_host_runtime
 require_cmd node
+ensure_supervisord_cmd
 require_cmd supervisord
 require_node_24
 install_runtime_bundle "${runtime_bundle}"
