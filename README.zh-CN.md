@@ -54,7 +54,7 @@ Debian：
 apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
 ```
 
-交互式面板：
+交互式 TUI 面板：
 
 ```sh
 curl -fsSL -o /root/one-click-panel.sh \
@@ -86,6 +86,22 @@ curl -fsSL -o /root/one-click-panel.sh \
 sh /root/one-click-panel.sh update
 ```
 
+仅更新 Xray Core：
+
+```sh
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh update-xray
+```
+
+交互式 TUI 当前支持：
+
+- 启动脚本时采集一次节点状态、runtime 版本、Node Port、Xray Core 版本、IP、CPU 负载、内存、磁盘占用
+- 服务操作：安装、启动、停止、重启、卸载
+- 日志查看：服务日志、Xray 输出日志、Xray 错误日志
+- 运维操作：更新 remnanode-lite、更新 xray-core、编辑配置
+- 安装或升级成功后会写入 `/usr/local/bin/remnanode`，后续可在任意目录直接执行 `remnanode` 打开 TUI
+
 ## 参数说明
 
 一键脚本同时支持位置参数和环境变量。
@@ -94,18 +110,30 @@ sh /root/one-click-panel.sh update
 
 位置参数：
 
-- `ACTION`：默认 `auto`，支持 `auto`、`install`、`update`
+- `ACTION`：默认 `auto`，支持 `auto`、`install`、`update`、`tui`、`start`、`stop`、`restart`、`status`、`logs`、`xray-log`、`xray-err`、`update-xray`、`edit-config`、`uninstall`
 - `REPO_SLUG`：默认 `x-socks/remnanode-lite`
 - `REPO_REF`：默认 `main`
 - `RUNTIME_VERSION`：默认 `latest`
 
 环境变量：
 
-- `ACTION=auto`：自动判断执行安装还是更新
+- `ACTION=auto`：交互模式下进入 TUI；非交互模式下自动判断执行安装还是更新
 - `REPO_SLUG=x-socks/remnanode-lite`：用于下载 raw 脚本和 GitHub Release 资产的仓库
 - `REPO_REF=main`：下载 `one-click-deploy.sh` / `one-click-upgrade.sh` 时使用的 Git ref
 - `RUNTIME_VERSION=latest`：runtime 选择器。`latest` 表示最新发布版本；如果已有版本化资产，也可以填具体版本如 `2.6.1`
 - `BASE_DIR=/opt/remnanode`：当前 release 根目录。暂不完整支持非默认值，因为生成出来的服务文件仍固定使用 `/opt/remnanode/current`
+- `PANEL_INSTALL_DIR=/usr/local/lib/remnanode`：持久化 `remnanode` 命令包装器时使用的安装目录
+
+额外管理动作：
+
+- `tui`：直接进入完整管理面板
+- `status`：单次打印当前仪表盘和服务状态
+- `logs`：输出最近的 Remnanode 服务日志
+- `xray-log`：输出最近的 Xray stdout 日志
+- `xray-err`：输出最近的 Xray stderr 日志
+- `update-xray`：只下载并替换本地 Xray Core
+- `edit-config`：用 `$EDITOR` 打开 `/etc/remnanode/remnanode.env`、`/etc/xray/config.json` 或 `/etc/remnanode/github-release.env`
+- `uninstall`：移除 remnanode-lite、生成的配置、日志、runtime 文件，以及本地管理的 Xray 二进制
 
 平台分发：
 

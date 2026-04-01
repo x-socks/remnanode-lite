@@ -55,7 +55,7 @@ Debian:
 apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
 ```
 
-Interactive panel:
+Interactive TUI panel:
 
 ```sh
 curl -fsSL -o /root/one-click-panel.sh \
@@ -87,6 +87,22 @@ curl -fsSL -o /root/one-click-panel.sh \
 sh /root/one-click-panel.sh update
 ```
 
+Direct Xray core update:
+
+```sh
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh update-xray
+```
+
+Interactive TUI capabilities:
+
+- startup snapshot of node status, runtime version, node port, Xray core version, IP, CPU load, memory, and disk usage
+- service actions: install, start, stop, restart, uninstall
+- log views: service logs, Xray output logs, Xray error logs
+- maintenance actions: update remnanode-lite, update xray-core, edit configuration
+- after install or update, the script installs `/usr/local/bin/remnanode`, so you can open the TUI from any directory with `remnanode`
+
 ## Parameters
 
 The one-click scripts support both positional arguments and environment variables.
@@ -95,18 +111,30 @@ The one-click scripts support both positional arguments and environment variable
 
 Positional arguments:
 
-- `ACTION`: `auto` by default. Supported values: `auto`, `install`, `update`.
+- `ACTION`: `auto` by default. Supported values: `auto`, `install`, `update`, `tui`, `start`, `stop`, `restart`, `status`, `logs`, `xray-log`, `xray-err`, `update-xray`, `edit-config`, `uninstall`.
 - `REPO_SLUG`: `x-socks/remnanode-lite` by default.
 - `REPO_REF`: `main` by default.
 - `RUNTIME_VERSION`: `latest` by default.
 
 Environment variables:
 
-- `ACTION=auto`: auto-detect `install` or `update`.
+- `ACTION=auto`: open the TUI when running interactively; auto-detect `install` or `update` in non-interactive mode.
 - `REPO_SLUG=x-socks/remnanode-lite`: GitHub repository used for raw script downloads and release pulls.
 - `REPO_REF=main`: Git ref used when downloading `one-click-deploy.sh` or `one-click-upgrade.sh`.
 - `RUNTIME_VERSION=latest`: runtime selector. Use `latest` for the newest published bundle, or a concrete release version such as `2.6.1` when versioned assets exist.
 - `BASE_DIR=/opt/remnanode`: current release root on the VPS. Non-default values are not fully supported because the generated service files still assume `/opt/remnanode/current`.
+- `PANEL_INSTALL_DIR=/usr/local/lib/remnanode`: install location used for the persistent `remnanode` command wrapper.
+
+Additional management actions:
+
+- `tui`: open the full-screen management panel directly.
+- `status`: print the current dashboard and service status once.
+- `logs`: print recent Remnanode service logs.
+- `xray-log`: print recent Xray stdout logs.
+- `xray-err`: print recent Xray stderr logs.
+- `update-xray`: download and replace the local Xray core only.
+- `edit-config`: open `/etc/remnanode/remnanode.env`, `/etc/xray/config.json`, or `/etc/remnanode/github-release.env` in `$EDITOR`.
+- `uninstall`: remove remnanode-lite, generated configs, logs, runtime files, and the locally managed Xray binaries.
 
 Platform dispatch:
 
