@@ -5,7 +5,7 @@ The target VPS should never build Remnanode locally.
 This repository uses two paths:
 
 1. Export and publish runtime bundles on a separate machine or in GitHub Actions.
-2. Pull and install those bundles from the Alpine VPS.
+2. Pull and install those bundles from the target VPS.
 
 ## Manual Export
 
@@ -62,8 +62,19 @@ Published release assets:
 
 Run on the VPS:
 
+Alpine:
+
 ```sh
 apk add --no-cache curl && \
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh install
+```
+
+Debian:
+
+```sh
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh install
@@ -85,8 +96,19 @@ That install path pulls the selected runtime bundle from GitHub Releases and wri
 
 Run on the VPS:
 
+Alpine:
+
 ```sh
 apk add --no-cache curl && \
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh update
+```
+
+Debian:
+
+```sh
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh update
@@ -104,9 +126,13 @@ That update path:
 Because each runtime lands in its own release directory, rollback is just:
 
 ```sh
-ln -sfn /opt/remnanode/releases/<previous-release-id> /opt/remnanode/current && \
-rc-service remnanode restart
+ln -sfn /opt/remnanode/releases/<previous-release-id> /opt/remnanode/current
 ```
+
+Then restart the host service:
+
+- Alpine: `rc-service remnanode restart`
+- Debian: `systemctl restart remnanode.service`
 
 ## Important Boundary
 

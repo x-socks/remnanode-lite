@@ -1,6 +1,6 @@
 # remnanode-lite
 
-Bare-metal Remnanode deployment for extremely constrained Alpine LXC VPS hosts.
+Bare-metal Remnanode deployment for constrained Alpine and Debian VPS hosts.
 
 Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
@@ -17,7 +17,7 @@ flowchart TB
     F --> H["update"]
 
     G --> I["Download runtime from GitHub Releases"]
-    G --> J["Write OpenRC / supervisord / env"]
+    G --> J["Write host service / supervisord / env"]
 
     H --> I
 
@@ -36,15 +36,28 @@ The current repository is designed to match the new architecture:
 - the runner only exports and publishes the upstream Remnanode runtime bundle
 - the runner does not SSH into the VPS
 - the VPS pulls either the latest runtime alias or a versioned runtime bundle from GitHub Releases by itself
-- `install` writes host-local OpenRC, supervisord, and env files
+- `install` writes host-local service, supervisord, and env files
 - `update` refreshes host-side service files, pulls a newer runtime, switches the active release, and restarts the services
 
 ## Quick Start
 
+Install `curl` first:
+
+Alpine:
+
+```sh
+apk add --no-cache curl
+```
+
+Debian:
+
+```sh
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+```
+
 Interactive panel:
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh
@@ -53,7 +66,6 @@ sh /root/one-click-panel.sh
 Direct install:
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh install
@@ -62,7 +74,6 @@ sh /root/one-click-panel.sh install
 Direct install with a pinned runtime version:
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh install
@@ -71,7 +82,6 @@ RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh install
 Direct update:
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh update
@@ -97,6 +107,12 @@ Environment variables:
 - `REPO_REF=main`: Git ref used when downloading `one-click-deploy.sh` or `one-click-upgrade.sh`.
 - `RUNTIME_VERSION=latest`: runtime selector. Use `latest` for the newest published bundle, or a concrete release version such as `2.6.1` when versioned assets exist.
 - `BASE_DIR=/opt/remnanode`: current release root on the VPS. Non-default values are not fully supported because the generated service files still assume `/opt/remnanode/current`.
+
+Platform dispatch:
+
+- Alpine hosts are detected via `/etc/alpine-release`.
+- Debian hosts are detected via `/etc/debian_version` plus `systemctl`.
+- `one-click-deploy.sh` and `one-click-upgrade.sh` dispatch to platform-specific implementations after detection.
 
 ### `scripts/one-click-deploy.sh`
 
@@ -171,19 +187,23 @@ Environment variables:
 - `XRAY_ASSET_DIR=/usr/local/share/xray`
 - `REMNANODE_ULIMIT_NOFILE=65535`
 
-`BASE_DIR` only changes where release bundles are stored. The generated OpenRC service and `REMNANODE_APP_DIR` still target `/opt/remnanode/current`.
+`BASE_DIR` only changes where release bundles are stored. The generated service files and `REMNANODE_APP_DIR` still target `/opt/remnanode/current`.
 
 ## Runtime Model
 
-Validated target state:
+Current supported host families:
 
 - Alpine Linux `3.23.x` with OpenRC
+- Debian with `systemd`
+
+Validated runtime characteristics:
+
 - `128 MB` RAM is now the experimental floor; `256 MB` remains the safer baseline
 - no swap
 - NAT networking with only a small high-port window available
 - Node.js `24.x`
 - Xray installed locally as `/usr/local/bin/xray` and `/usr/local/bin/rw-core`
-- OpenRC `remnanode` service running as `root:root`
+- host-local `remnanode` service running as `root:root`
 - `supervisord` present on the host as a compatibility control plane
 
 Current required runtime variables:
@@ -200,23 +220,35 @@ Only these scripts are part of the current architecture:
 - `scripts/one-click-deploy.sh`
 - `scripts/one-click-upgrade.sh`
 
+Implementation split:
+
+- `scripts/one-click-deploy.sh` / `scripts/one-click-upgrade.sh`: shared dispatchers
+- `scripts/one-click-deploy-alpine.sh` / `scripts/one-click-upgrade-alpine.sh`: Alpine implementations
+- `scripts/one-click-deploy-debian.sh` / `scripts/one-click-upgrade-debian.sh`: Debian implementations
+
 ## Conformance Check
 
 Current practice matches the target architecture:
 
 - [`.github/workflows/runtime-bundle.yml`](.github/workflows/runtime-bundle.yml) only exports and publishes release assets
 - [`scripts/one-click-panel.sh`](scripts/one-click-panel.sh) only chooses `install` or `update` and downloads the matching host-side script
-- [`scripts/one-click-deploy.sh`](scripts/one-click-deploy.sh) installs host dependencies, writes local OpenRC and minimal supervisord config, downloads the selected runtime from GitHub Releases, and starts the service
-- [`scripts/one-click-upgrade.sh`](scripts/one-click-upgrade.sh) refreshes host-side service files, downloads the selected runtime from GitHub Releases, installs it into a new release directory, switches `current`, and restarts `remnanode`
+- [`scripts/one-click-deploy.sh`](scripts/one-click-deploy.sh) detects Alpine vs Debian, dispatches to the host-specific installer, and preserves the shared public entrypoint
+- [`scripts/one-click-upgrade.sh`](scripts/one-click-upgrade.sh) detects Alpine vs Debian, dispatches to the host-specific upgrader, and preserves the shared public entrypoint
+- [`scripts/one-click-deploy-alpine.sh`](scripts/one-click-deploy-alpine.sh) installs host dependencies, writes local OpenRC and minimal supervisord config, downloads the selected runtime from GitHub Releases, and starts the service
+- [`scripts/one-click-upgrade-alpine.sh`](scripts/one-click-upgrade-alpine.sh) refreshes Alpine host-side service files, downloads the selected runtime from GitHub Releases, installs it into a new release directory, switches `current`, and restarts `remnanode`
+- [`scripts/one-click-deploy-debian.sh`](scripts/one-click-deploy-debian.sh) installs host dependencies, writes local systemd and minimal supervisord config, downloads the selected runtime from GitHub Releases, and starts the service
+- [`scripts/one-click-upgrade-debian.sh`](scripts/one-click-upgrade-debian.sh) refreshes Debian host-side service files, downloads the selected runtime from GitHub Releases, installs it into a new release directory, switches `current`, and restarts `remnanode`
 
 One minor implementation detail:
 
 - `one-click-panel.sh` still downloads `one-click-deploy.sh` or `one-click-upgrade.sh` from GitHub Raw before executing them on the VPS
+- those dispatchers may then download the platform-specific Alpine or Debian implementation when it is not already present locally
 - this still fits the new model, because the runner is not connecting to the VPS; the VPS is pulling what it needs itself
 
 ## Docs
 
 - [docs/alpine-bare-metal.md](docs/alpine-bare-metal.md)
+- [docs/debian-bare-metal.md](docs/debian-bare-metal.md)
 - [docs/runtime-bundle-workflow.md](docs/runtime-bundle-workflow.md)
 - [docs/github-actions.md](docs/github-actions.md)
 - [README.zh-CN.md](README.zh-CN.md)

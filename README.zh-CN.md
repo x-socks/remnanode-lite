@@ -1,6 +1,6 @@
 # remnanode-lite
 
-面向极限资源 Alpine LXC VPS 的 Remnanode 裸机部署方案。
+面向受限 Alpine 与 Debian VPS 的 Remnanode 裸机部署方案。
 
 English version: [README.md](README.md)
 
@@ -17,7 +17,7 @@ flowchart TB
     F --> H["update"]
 
     G --> I["从 GitHub Releases 下载 runtime"]
-    G --> J["写入 OpenRC / supervisord / env"]
+    G --> J["写入宿主机 service / supervisord / env"]
 
     H --> I
 
@@ -35,15 +35,28 @@ flowchart TB
 - GitHub Actions 只负责导出和发布 runtime bundle。
 - runner 不会 SSH 到 VPS。
 - VPS 自己从 GitHub Releases 拉取 `latest` 或指定版本的 runtime。
-- `install` 负责写本地 OpenRC、supervisord 和 env 文件。
+- `install` 负责写本地 service、supervisord 和 env 文件。
 - `update` 负责刷新宿主机脚本、切换 runtime 版本并重启服务。
 
 ## 快速开始
 
+先安装 `curl`：
+
+Alpine：
+
+```sh
+apk add --no-cache curl
+```
+
+Debian：
+
+```sh
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+```
+
 交互式面板：
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh
@@ -52,7 +65,6 @@ sh /root/one-click-panel.sh
 直接安装：
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh install
@@ -61,7 +73,6 @@ sh /root/one-click-panel.sh install
 指定 runtime 版本安装：
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh install
@@ -70,7 +81,6 @@ RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh install
 直接更新：
 
 ```sh
-apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh update
@@ -96,6 +106,12 @@ sh /root/one-click-panel.sh update
 - `REPO_REF=main`：下载 `one-click-deploy.sh` / `one-click-upgrade.sh` 时使用的 Git ref
 - `RUNTIME_VERSION=latest`：runtime 选择器。`latest` 表示最新发布版本；如果已有版本化资产，也可以填具体版本如 `2.6.1`
 - `BASE_DIR=/opt/remnanode`：当前 release 根目录。暂不完整支持非默认值，因为生成出来的服务文件仍固定使用 `/opt/remnanode/current`
+
+平台分发：
+
+- Alpine 通过 `/etc/alpine-release` 识别。
+- Debian 通过 `/etc/debian_version` + `systemctl` 识别。
+- `one-click-deploy.sh` 与 `one-click-upgrade.sh` 会先识别宿主机，再分发到对应平台实现。
 
 ### `scripts/one-click-deploy.sh`
 
@@ -170,20 +186,24 @@ sh /root/one-click-panel.sh update
 - `XRAY_ASSET_DIR=/usr/local/share/xray`
 - `REMNANODE_ULIMIT_NOFILE=65535`
 
-`BASE_DIR` 只会改变 release bundle 的存放位置；生成出来的 OpenRC 服务和 `REMNANODE_APP_DIR` 仍然固定指向 `/opt/remnanode/current`。
+`BASE_DIR` 只会改变 release bundle 的存放位置；生成出来的服务文件和 `REMNANODE_APP_DIR` 仍然固定指向 `/opt/remnanode/current`。
 
 ## 运行模型
 
-当前验证过的目标状态：
+当前支持的宿主机族：
 
 - Alpine Linux `3.23.x` + OpenRC
+- Debian + `systemd`
+
+当前运行时特征：
+
 - `128 MB` 目前仍然是实验下限，`256 MB` 更稳
 - 无 swap 更容易暴露内存问题
 - NAT 网络环境，小范围高位端口可用
 - Node.js `24.x`
 - Xray 安装在本地 `/usr/local/bin/xray`
 - `/usr/local/bin/rw-core -> /usr/local/bin/xray`
-- OpenRC `remnanode` 服务以 `root:root` 运行
+- 宿主机本地 `remnanode` 服务以 `root:root` 运行
 - `supervisord` 仍作为兼容控制平面保留
 
 当前最少必填变量：
@@ -198,9 +218,16 @@ sh /root/one-click-panel.sh update
 - `scripts/one-click-deploy.sh`
 - `scripts/one-click-upgrade.sh`
 
+实现分层：
+
+- `scripts/one-click-deploy.sh` / `scripts/one-click-upgrade.sh`：公共 dispatcher
+- `scripts/one-click-deploy-alpine.sh` / `scripts/one-click-upgrade-alpine.sh`：Alpine 实现
+- `scripts/one-click-deploy-debian.sh` / `scripts/one-click-upgrade-debian.sh`：Debian 实现
+
 ## 说明文档
 
 - [docs/alpine-bare-metal.md](docs/alpine-bare-metal.md)
+- [docs/debian-bare-metal.md](docs/debian-bare-metal.md)
 - [docs/runtime-bundle-workflow.md](docs/runtime-bundle-workflow.md)
 - [docs/github-actions.md](docs/github-actions.md)
 - [README.md](README.md)

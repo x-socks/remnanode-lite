@@ -11,7 +11,7 @@ The split is:
 1. GitHub runner pulls `remnawave/node:latest`.
 2. GitHub runner exports the runtime bundle.
 3. GitHub runner publishes `remnanode-runtime-<upstream-version>.tar.gz` and refreshes the `remnanode-runtime-latest.tar.gz` alias on GitHub Releases.
-4. The Alpine VPS later pulls that release asset itself.
+4. The target VPS later pulls that release asset itself.
 
 The workflow is [`.github/workflows/runtime-bundle.yml`](../.github/workflows/runtime-bundle.yml).
 
@@ -55,6 +55,8 @@ That digest is what the daily job uses to decide whether a new release is needed
 
 Run on the VPS:
 
+Alpine:
+
 ```sh
 apk add --no-cache curl && \
 curl -fsSL -o /root/one-click-panel.sh \
@@ -62,19 +64,30 @@ curl -fsSL -o /root/one-click-panel.sh \
 sh /root/one-click-panel.sh
 ```
 
+Debian:
+
+```sh
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh
+```
+
 The install path:
 
-- installs the Alpine packages it needs on the VPS
+- installs the host packages it needs on the VPS
 - installs Xray locally on the VPS
 - downloads the selected runtime bundle from GitHub Releases
 - prompts for `NODE_PORT`
 - prompts for `SECRET_KEY`
-- writes OpenRC and minimal supervisord config locally on the VPS
+- writes the host-local service files and minimal supervisord config locally on the VPS
 - starts `remnanode`
 
 ## Later Upgrades On The VPS
 
 Run on the VPS:
+
+Alpine:
 
 ```sh
 apk add --no-cache curl && \
@@ -83,9 +96,18 @@ curl -fsSL -o /root/one-click-panel.sh \
 sh /root/one-click-panel.sh update
 ```
 
+Debian:
+
+```sh
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+curl -fsSL -o /root/one-click-panel.sh \
+  https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
+sh /root/one-click-panel.sh update
+```
+
 That update path:
 
-- refreshes the host-side OpenRC service files
+- refreshes the host-side service files
 - refreshes the host-side supervisord config
 - downloads the selected runtime bundle, defaulting to `latest`
 - installs it into a new release directory
@@ -95,6 +117,6 @@ That update path:
 ## Terminology
 
 - `runner`: the temporary GitHub Actions machine provided by GitHub
-- `VPS`: your Alpine machine that actually runs Remnanode
+- `VPS`: your Alpine or Debian machine that actually runs Remnanode
 
 In this project, the runner only publishes release assets. The VPS is the only side that pulls and installs them.

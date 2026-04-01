@@ -1,13 +1,10 @@
-# Alpine Bare-Metal Deployment
+# Debian Bare-Metal Deployment
 
-This layout targets Alpine LXC guests where Docker and local NestJS builds are too expensive.
-
-For Debian hosts, use [docs/debian-bare-metal.md](debian-bare-metal.md).
+This layout targets Debian hosts where Docker and local NestJS builds are too expensive or unnecessary.
 
 Validated host state:
 
-- Alpine `3.23.x`
-- OpenRC
+- Debian with `systemd`
 - Node.js `24.x`
 - `supervisord`
 - local Xray binary at `/usr/local/bin/xray`
@@ -21,7 +18,7 @@ Validated host state:
 Run on the VPS:
 
 ```sh
-apk add --no-cache curl && \
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh install
@@ -29,7 +26,8 @@ sh /root/one-click-panel.sh install
 
 The installer will:
 
-- install required Alpine packages
+- install required Debian packages
+- install or upgrade Node.js `24.x` if the host is older
 - install Xray if it is missing
 - download the selected runtime bundle from GitHub Releases
 - default to `latest`, but allow pinning `RUNTIME_VERSION=<upstream-version>`
@@ -37,7 +35,7 @@ The installer will:
 - prompt for `SECRET_KEY`
 - write `/etc/remnanode/remnanode.env`
 - write `/etc/supervisord.conf`
-- write OpenRC service files
+- write `/etc/systemd/system/remnanode.service`
 - start `remnanode`
 
 Accepted `SECRET_KEY` input:
@@ -50,7 +48,7 @@ Accepted `SECRET_KEY` input:
 Run on the VPS:
 
 ```sh
-apk add --no-cache curl && \
+apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
 curl -fsSL -o /root/one-click-panel.sh \
   https://raw.githubusercontent.com/x-socks/remnanode-lite/main/scripts/one-click-panel.sh && \
 sh /root/one-click-panel.sh update
@@ -68,8 +66,7 @@ RUNTIME_VERSION=2.6.1 sh /root/one-click-panel.sh update
 - `/etc/remnanode/remnanode.env`
 - `/etc/remnanode/github-release.env`
 - `/etc/supervisord.conf`
-- `/etc/init.d/remnanode`
-- `/etc/conf.d/remnanode`
+- `/etc/systemd/system/remnanode.service`
 - `/usr/local/bin/remnanode-start`
 - `/opt/remnanode/current`
 
@@ -102,8 +99,7 @@ Low-memory defaults:
 
 ## Logs
 
-- `/var/log/remnanode/remnanode.log`
-- `/var/log/remnanode/remnanode.err`
+- `journalctl -u remnanode.service`
 - `/var/log/supervisor/supervisord.log`
 - `/var/log/remnanode/xray.log`
 - `/var/log/remnanode/xray.err`
@@ -129,7 +125,8 @@ Expected active tree:
 - Use `RUNTIME_VERSION=latest` to track the newest export, or pin a specific upstream version when you need deterministic rollout behavior.
 - Keep file descriptor limits high.
 - On `128 MB` hosts, treat these defaults as experimental and expect little burst headroom.
-- On 256 MB hosts, raising V8 heap limits usually makes OOM behavior worse.
+- On `256 MB` hosts, raising V8 heap limits usually makes OOM behavior worse.
+- The Debian path installs Node.js `24.x` locally under `/usr/local/lib/...` when the host version is too old.
 
 ## Common Failure Modes
 
@@ -143,11 +140,11 @@ Expected active tree:
 - The panel secret was empty or truncated.
 - Paste the full payload from the panel.
 
-`Supervisord socket file not found`
+`remnanode-start: supervisord socket not ready`
 
 - `supervisord` did not come up cleanly.
 - Check `/var/log/supervisor/supervisord.log`.
-- Check `/var/log/remnanode/remnanode.err`.
+- Check `journalctl -u remnanode.service`.
 - Check `/etc/supervisord.conf`.
 
 `connect ECONNREFUSED 127.0.0.1:61000`
@@ -157,5 +154,5 @@ Expected active tree:
 
 `Killed` or exit code `137`
 
-- The container hit its memory limit.
+- The host hit its memory limit.
 - Do not increase heap size blindly on `128 MB` or `256 MB` hosts.
