@@ -5,6 +5,7 @@ set -eu
 REPO_SLUG="${1:-${REPO_SLUG:-x-socks/remnanode-lite}}"
 REPO_REF="${REPO_REF:-main}"
 WORK_DIR=""
+RESOLVED_SCRIPT=""
 
 cleanup() {
     if [ -n "${WORK_DIR}" ] && [ -d "${WORK_DIR}" ]; then
@@ -50,7 +51,7 @@ resolve_delegate_script() {
     script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
     if [ -f "${script_dir}/${target_script}" ]; then
-        printf '%s\n' "${script_dir}/${target_script}"
+        RESOLVED_SCRIPT="${script_dir}/${target_script}"
         return 0
     fi
 
@@ -66,13 +67,13 @@ resolve_delegate_script() {
 
     printf '%s\n' "downloading ${script_url}" >&2
     download_file "${script_url}" "${script_path}"
-    printf '%s\n' "${script_path}"
+    RESOLVED_SCRIPT="${script_path}"
 }
 
 platform="$(detect_platform)"
 delegate_script="one-click-upgrade-${platform}.sh"
 
 printf '%s\n' "detected platform: ${platform}" >&2
-resolved_script="$(resolve_delegate_script "${delegate_script}")"
+resolve_delegate_script "${delegate_script}"
 
-exec env REPO_REF="${REPO_REF}" sh "${resolved_script}" "$@"
+exec env REPO_REF="${REPO_REF}" sh "${RESOLVED_SCRIPT}" "$@"
