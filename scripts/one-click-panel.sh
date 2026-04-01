@@ -934,6 +934,11 @@ capture_dashboard_snapshot() {
     SNAPSHOT_DISK_USAGE="$(extract_disk_usage)"
 }
 
+refresh_dashboard_snapshot() {
+    load_saved_defaults
+    capture_dashboard_snapshot
+}
+
 print_menu() {
     printf '\n'
     print_colored_title "${ANSI_GREEN}" "🛠️" "Installation & Management"
@@ -972,23 +977,28 @@ run_tui() {
                     printf '%s\n' "install failed" >&2
                 else
                     install_cli_launcher || true
+                    refresh_dashboard_snapshot
                 fi
                 press_enter
                 ;;
             2)
                 run_service_action start || true
+                refresh_dashboard_snapshot
                 press_enter
                 ;;
             3)
                 run_service_action stop || true
+                refresh_dashboard_snapshot
                 press_enter
                 ;;
             4)
                 run_service_action restart || true
+                refresh_dashboard_snapshot
                 press_enter
                 ;;
             5)
                 uninstall_remnanode
+                refresh_dashboard_snapshot
                 press_enter
                 ;;
             6)
@@ -1008,6 +1018,7 @@ run_tui() {
                     printf '%s\n' "update failed" >&2
                 else
                     install_cli_launcher || true
+                    refresh_dashboard_snapshot
                 fi
                 press_enter
                 ;;
@@ -1015,10 +1026,12 @@ run_tui() {
                 if ! update_xray_core; then
                     printf '%s\n' "xray-core update failed" >&2
                 fi
+                refresh_dashboard_snapshot
                 press_enter
                 ;;
             12)
                 edit_configuration || true
+                refresh_dashboard_snapshot
                 ;;
             0|q|Q|quit|QUIT|exit|EXIT)
                 exit 0
@@ -1029,7 +1042,6 @@ run_tui() {
                 ;;
         esac
 
-        load_saved_defaults
     done
 }
 
