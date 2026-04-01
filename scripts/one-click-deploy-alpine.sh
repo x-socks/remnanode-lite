@@ -49,6 +49,75 @@ download_file() {
     exit 1
 }
 
+read_cgroup_memory_limit_mb() {
+    if [ ! -r /sys/fs/cgroup/memory.max ]; then
+        return 1
+    fi
+
+    limit_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || true)"
+    case "${limit_bytes}" in
+        ''|max|*[!0-9]*)
+            return 1
+            ;;
+    esac
+
+    awk -v bytes="${limit_bytes}" 'BEGIN {
+        if (bytes <= 0) {
+            exit 1
+        }
+        printf "%d\n", bytes / 1048576
+    }'
+}
+
+detect_effective_memory_limit_mb() {
+    mem_total_mb=""
+    cgroup_limit_mb="$(read_cgroup_memory_limit_mb || true)"
+
+    if [ -r /proc/meminfo ]; then
+        mem_total_mb="$(awk '/MemTotal:/ { printf "%d\n", $2 / 1024; exit }' /proc/meminfo 2>/dev/null || true)"
+    fi
+
+    if [ -n "${cgroup_limit_mb}" ] && [ -n "${mem_total_mb}" ] && [ "${cgroup_limit_mb}" -lt "${mem_total_mb}" ]; then
+        printf '%s\n' "${cgroup_limit_mb}"
+        return 0
+    fi
+
+    if [ -n "${mem_total_mb}" ]; then
+        printf '%s\n' "${mem_total_mb}"
+        return 0
+    fi
+
+    if [ -n "${cgroup_limit_mb}" ]; then
+        printf '%s\n' "${cgroup_limit_mb}"
+        return 0
+    fi
+
+    printf '%s\n' 0
+}
+
+default_node_options() {
+    limit_mb="$(detect_effective_memory_limit_mb)"
+    old_space_mb=48
+
+    case "${limit_mb}" in
+        ''|0)
+            ;;
+        *)
+            if [ "${limit_mb}" -le 128 ]; then
+                old_space_mb=12
+            elif [ "${limit_mb}" -le 192 ]; then
+                old_space_mb=16
+            elif [ "${limit_mb}" -le 256 ]; then
+                old_space_mb=24
+            elif [ "${limit_mb}" -le 384 ]; then
+                old_space_mb=32
+            fi
+            ;;
+    esac
+
+    printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+}
+
 prompt_required() {
     prompt_text="$1"
     current_value="$2"
@@ -412,8 +481,8 @@ XRAY_BIN=/usr/local/bin/xray
 XRAY_CONFIG=/etc/xray/config.json
 XRAY_ASSET_DIR=/usr/local/share/xray
 
-# Runtime hard limits for 128 MB experimental hosts
-NODE_OPTIONS='--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1'
+# Runtime hard limits. The installer auto-tunes this based on the host memory limit.
+NODE_OPTIONS='--max-http-header-size=32768 --max-old-space-size=24 --max-semi-space-size=1'
 MALLOC_ARENA_MAX=1
 UV_THREADPOOL_SIZE=1
 REMNANODE_ULIMIT_NOFILE=65535
@@ -595,7 +664,67 @@ fi
 ulimit -n "${NOFILE_LIMIT}" 2>/dev/null || true
 
 export NODE_ENV="${REMNANODE_ENV:-production}"
-export NODE_OPTIONS="${NODE_OPTIONS:---max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1}"
+detect_effective_memory_limit_mb() {
+    cgroup_limit_mb=""
+    mem_total_mb=""
+
+    if [ -r /sys/fs/cgroup/memory.max ]; then
+        limit_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || true)"
+        case "${limit_bytes}" in
+            ''|max|*[!0-9]*)
+                ;;
+            *)
+                cgroup_limit_mb="$(awk -v bytes="${limit_bytes}" 'BEGIN { if (bytes > 0) printf "%d", bytes / 1048576 }')"
+                ;;
+        esac
+    fi
+
+    if [ -r /proc/meminfo ]; then
+        mem_total_mb="$(awk '/MemTotal:/ { printf "%d", $2 / 1024; exit }' /proc/meminfo 2>/dev/null || true)"
+    fi
+
+    if [ -n "${cgroup_limit_mb}" ] && [ -n "${mem_total_mb}" ] && [ "${cgroup_limit_mb}" -lt "${mem_total_mb}" ]; then
+        printf '%s\n' "${cgroup_limit_mb}"
+        return 0
+    fi
+
+    if [ -n "${mem_total_mb}" ]; then
+        printf '%s\n' "${mem_total_mb}"
+        return 0
+    fi
+
+    if [ -n "${cgroup_limit_mb}" ]; then
+        printf '%s\n' "${cgroup_limit_mb}"
+        return 0
+    fi
+
+    printf '%s\n' 0
+}
+
+default_node_options() {
+    limit_mb="$(detect_effective_memory_limit_mb)"
+    old_space_mb=48
+
+    case "${limit_mb}" in
+        ''|0)
+            ;;
+        *)
+            if [ "${limit_mb}" -le 128 ]; then
+                old_space_mb=12
+            elif [ "${limit_mb}" -le 192 ]; then
+                old_space_mb=16
+            elif [ "${limit_mb}" -le 256 ]; then
+                old_space_mb=24
+            elif [ "${limit_mb}" -le 384 ]; then
+                old_space_mb=32
+            fi
+            ;;
+    esac
+
+    printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+}
+
+export NODE_OPTIONS="${NODE_OPTIONS:-$(default_node_options)}"
 export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-1}"
 export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-1}"
 export XRAY_CORE_VERSION="$([ -x /usr/local/bin/rw-core ] && /usr/local/bin/rw-core version | head -n 1 || true)"
@@ -900,7 +1029,7 @@ update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_PASSWORD "${SUPER
 update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_SOCKET_PATH "${SUPERVISORD_SOCKET_PATH}"
 update_key_value_file /etc/remnanode/remnanode.env SUPERVISORD_PID_PATH "${SUPERVISORD_PID_PATH}"
 install_supervisord_config
-update_key_value_file /etc/remnanode/remnanode.env NODE_OPTIONS "--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1"
+update_key_value_file /etc/remnanode/remnanode.env NODE_OPTIONS "$(default_node_options)"
 update_key_value_file /etc/remnanode/remnanode.env MALLOC_ARENA_MAX 1
 update_key_value_file /etc/remnanode/remnanode.env UV_THREADPOOL_SIZE 1
 update_key_value_file /etc/remnanode/github-release.env REPO_SLUG "${REPO_SLUG}"

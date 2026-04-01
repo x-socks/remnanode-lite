@@ -372,6 +372,59 @@ human_kib() {
     }'
 }
 
+human_bytes() {
+    bytes_value="$1"
+
+    awk -v bytes="${bytes_value}" 'BEGIN {
+        split("B KiB MiB GiB TiB", units, " ")
+        value = bytes + 0
+        unit = 1
+        while (value >= 1024 && unit < 5) {
+            value = value / 1024
+            unit++
+        }
+        if (unit <= 2) {
+            printf "%.0f%s", value, units[unit]
+        } else {
+            printf "%.1f%s", value, units[unit]
+        }
+    }'
+}
+
+read_cgroup_memory_limit_bytes() {
+    if [ ! -r /sys/fs/cgroup/memory.max ]; then
+        return 1
+    fi
+
+    limit_value="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || true)"
+    case "${limit_value}" in
+        ''|max|*[!0-9]*)
+            return 1
+            ;;
+    esac
+
+    if [ "${limit_value}" -le 0 ]; then
+        return 1
+    fi
+
+    printf '%s\n' "${limit_value}"
+}
+
+read_cgroup_memory_current_bytes() {
+    if [ ! -r /sys/fs/cgroup/memory.current ]; then
+        return 1
+    fi
+
+    current_value="$(cat /sys/fs/cgroup/memory.current 2>/dev/null || true)"
+    case "${current_value}" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+    esac
+
+    printf '%s\n' "${current_value}"
+}
+
 extract_memory_usage() {
     if [ ! -r /proc/meminfo ]; then
         printf '%s\n' "n/a"
@@ -383,6 +436,15 @@ extract_memory_usage() {
 
     if [ -z "${mem_total}" ] || [ -z "${mem_available}" ]; then
         printf '%s\n' "n/a"
+        return 0
+    fi
+
+    mem_total_bytes=$((mem_total * 1024))
+    cgroup_limit_bytes="$(read_cgroup_memory_limit_bytes || true)"
+    cgroup_current_bytes="$(read_cgroup_memory_current_bytes || true)"
+
+    if [ -n "${cgroup_limit_bytes}" ] && [ -n "${cgroup_current_bytes}" ] && [ "${cgroup_limit_bytes}" -lt "${mem_total_bytes}" ]; then
+        printf '%s / %s\n' "$(human_bytes "${cgroup_current_bytes}")" "$(human_bytes "${cgroup_limit_bytes}")"
         return 0
     fi
 
@@ -476,13 +538,20 @@ EOF
 }
 
 current_service_status() {
+    node_port="$(extract_node_port)"
+
     if ! is_installed; then
         printf '%s\n' "NOT INSTALLED"
         return 0
     fi
 
-    if service_is_active; then
+    if node_process_is_running && port_is_listening "${node_port}"; then
         printf '%s\n' "RUNNING"
+        return 0
+    fi
+
+    if service_is_active || node_process_is_running || port_is_listening "${node_port}"; then
+        printf '%s\n' "DEGRADED (panel unreachable)"
     else
         printf '%s\n' "STOPPED"
     fi
@@ -497,7 +566,46 @@ extract_full_url() {
         return 0
     fi
 
-    printf '%s:%s\n' "${ip_value}" "${node_port}"
+    case "${ip_value}" in
+        *:*)
+            printf '[%s]:%s\n' "${ip_value}" "${node_port}"
+            ;;
+        *)
+            printf '%s:%s\n' "${ip_value}" "${node_port}"
+            ;;
+    esac
+}
+
+node_process_is_running() {
+    main_file="${BASE_DIR}/current/dist/src/main.js"
+
+    if pgrep -f "node ${main_file}" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    pgrep -f "${main_file}" >/dev/null 2>&1
+}
+
+port_is_listening() {
+    port_value="$1"
+
+    case "${port_value}" in
+        ''|n/a|*[!0-9]*)
+            return 1
+            ;;
+    esac
+
+    if command_exists ss; then
+        ss -lnt 2>/dev/null | awk -v port="${port_value}" 'NR > 1 && $4 ~ ":" port "$" { found = 1 } END { exit(found ? 0 : 1) }'
+        return $?
+    fi
+
+    if command_exists netstat; then
+        netstat -lnt 2>/dev/null | awk -v port="${port_value}" 'NR > 2 && $4 ~ ":" port "$" { found = 1 } END { exit(found ? 0 : 1) }'
+        return $?
+    fi
+
+    return 1
 }
 
 clear_screen() {
