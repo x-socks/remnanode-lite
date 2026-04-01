@@ -76,4 +76,4 @@ delegate_script="one-click-upgrade-${platform}.sh"
 printf '%s\n' "detected platform: ${platform}" >&2
 resolve_delegate_script "${delegate_script}"
 
-exec env REPO_REF="${REPO_REF}" sh "${RESOLVED_SCRIPT}" "$@"
+env REPO_REF="${REPO_REF}" sh "${RESOLVED_SCRIPT}" "$@"
