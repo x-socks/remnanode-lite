@@ -97,7 +97,7 @@ detect_effective_memory_limit_mb() {
 
 default_node_options() {
     limit_mb="$(detect_effective_memory_limit_mb)"
-    old_space_mb=48
+    old_space_mb=""
 
     case "${limit_mb}" in
         ''|0)
@@ -107,15 +107,16 @@ default_node_options() {
                 old_space_mb=12
             elif [ "${limit_mb}" -le 192 ]; then
                 old_space_mb=16
-            elif [ "${limit_mb}" -le 256 ]; then
-                old_space_mb=24
-            elif [ "${limit_mb}" -le 384 ]; then
-                old_space_mb=32
             fi
             ;;
     esac
 
-    printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+    if [ -n "${old_space_mb}" ]; then
+        printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+        return 0
+    fi
+
+    printf '%s\n' "--max-http-header-size=32768 --max-semi-space-size=1"
 }
 
 prompt_required() {
@@ -482,7 +483,7 @@ XRAY_CONFIG=/etc/xray/config.json
 XRAY_ASSET_DIR=/usr/local/share/xray
 
 # Runtime hard limits. The installer auto-tunes this based on the host memory limit.
-NODE_OPTIONS='--max-http-header-size=32768 --max-old-space-size=24 --max-semi-space-size=1'
+NODE_OPTIONS='--max-http-header-size=32768 --max-semi-space-size=1'
 MALLOC_ARENA_MAX=1
 UV_THREADPOOL_SIZE=1
 REMNANODE_ULIMIT_NOFILE=65535
@@ -703,7 +704,7 @@ detect_effective_memory_limit_mb() {
 
 default_node_options() {
     limit_mb="$(detect_effective_memory_limit_mb)"
-    old_space_mb=48
+    old_space_mb=""
 
     case "${limit_mb}" in
         ''|0)
@@ -713,15 +714,16 @@ default_node_options() {
                 old_space_mb=12
             elif [ "${limit_mb}" -le 192 ]; then
                 old_space_mb=16
-            elif [ "${limit_mb}" -le 256 ]; then
-                old_space_mb=24
-            elif [ "${limit_mb}" -le 384 ]; then
-                old_space_mb=32
             fi
             ;;
     esac
 
-    printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+    if [ -n "${old_space_mb}" ]; then
+        printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+        return 0
+    fi
+
+    printf '%s\n' "--max-http-header-size=32768 --max-semi-space-size=1"
 }
 
 export NODE_OPTIONS="${NODE_OPTIONS:-$(default_node_options)}"

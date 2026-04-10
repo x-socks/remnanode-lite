@@ -92,7 +92,7 @@ Also used by the current host layout:
 
 Low-memory defaults:
 
-- `NODE_OPTIONS='--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1'`
+- `NODE_OPTIONS='--max-http-header-size=32768 --max-semi-space-size=1'`
 - `MALLOC_ARENA_MAX=1`
 - `UV_THREADPOOL_SIZE=1`
 - `REMNANODE_ULIMIT_NOFILE=65535`
@@ -125,7 +125,7 @@ Expected active tree:
 - Use `RUNTIME_VERSION=latest` to track the newest export, or pin a specific upstream version when you need deterministic rollout behavior.
 - Keep file descriptor limits high.
 - On `128 MB` hosts, treat these defaults as experimental and expect little burst headroom.
-- On `256 MB` hosts, raising V8 heap limits usually makes OOM behavior worse.
+- On `256 MB` hosts, the installer leaves `--max-old-space-size` unset by default.
 - The Debian path installs Node.js `24.x` locally under `/usr/local/lib/...` when the host version is too old.
 
 ## Common Failure Modes

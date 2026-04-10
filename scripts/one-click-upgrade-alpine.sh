@@ -136,7 +136,7 @@ detect_effective_memory_limit_mb() {
 
 default_node_options() {
     limit_mb="$(detect_effective_memory_limit_mb)"
-    old_space_mb=48
+    old_space_mb=""
 
     case "${limit_mb}" in
         ''|0)
@@ -146,20 +146,21 @@ default_node_options() {
                 old_space_mb=12
             elif [ "${limit_mb}" -le 192 ]; then
                 old_space_mb=16
-            elif [ "${limit_mb}" -le 256 ]; then
-                old_space_mb=24
-            elif [ "${limit_mb}" -le 384 ]; then
-                old_space_mb=32
             fi
             ;;
     esac
 
-    printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+    if [ -n "${old_space_mb}" ]; then
+        printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+        return 0
+    fi
+
+    printf '%s\n' "--max-http-header-size=32768 --max-semi-space-size=1"
 }
 
 is_managed_node_options() {
     case "$1" in
-        ''|"--max-http-header-size=65536 --max-old-space-size=64 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=32 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=24 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=16 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=12 --max-semi-space-size=1")
+        ''|"--max-http-header-size=65536 --max-old-space-size=64 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=48 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=32 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=24 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=16 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-old-space-size=12 --max-semi-space-size=1"|"--max-http-header-size=32768 --max-semi-space-size=1")
             return 0
             ;;
         *)
@@ -506,7 +507,7 @@ detect_effective_memory_limit_mb() {
 
 default_node_options() {
     limit_mb="$(detect_effective_memory_limit_mb)"
-    old_space_mb=48
+    old_space_mb=""
 
     case "${limit_mb}" in
         ''|0)
@@ -516,15 +517,16 @@ default_node_options() {
                 old_space_mb=12
             elif [ "${limit_mb}" -le 192 ]; then
                 old_space_mb=16
-            elif [ "${limit_mb}" -le 256 ]; then
-                old_space_mb=24
-            elif [ "${limit_mb}" -le 384 ]; then
-                old_space_mb=32
             fi
             ;;
     esac
 
-    printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+    if [ -n "${old_space_mb}" ]; then
+        printf '%s\n' "--max-http-header-size=32768 --max-old-space-size=${old_space_mb} --max-semi-space-size=1"
+        return 0
+    fi
+
+    printf '%s\n' "--max-http-header-size=32768 --max-semi-space-size=1"
 }
 
 export NODE_OPTIONS="${NODE_OPTIONS:-$(default_node_options)}"
